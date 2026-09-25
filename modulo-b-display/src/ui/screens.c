@@ -31,32 +31,36 @@ void create_screen_principal() {
         lv_obj_t *parent_obj = obj;
         {
             lv_obj_t *obj = lv_label_create(parent_obj);
-            lv_obj_set_pos(obj, 356, 232);
+            lv_obj_set_pos(obj, 244, 79);
             lv_obj_set_size(obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-            lv_label_set_text_static(obj, "Hello, world!");
+            lv_obj_set_style_text_font(obj, &lv_font_montserrat_28, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_label_set_text_static(obj, "Hello, world! Porraaaa");
         }
         {
             // rpm_txt
             lv_obj_t *obj = lv_label_create(parent_obj);
             objects.rpm_txt = obj;
-            lv_obj_set_pos(obj, 612, 97);
+            lv_obj_set_pos(obj, 107, 222);
             lv_obj_set_size(obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+            lv_obj_set_style_text_font(obj, &lv_font_montserrat_48, LV_PART_MAIN | LV_STATE_DEFAULT);
             lv_label_set_text(obj, "");
         }
         {
             // vel_txt
             lv_obj_t *obj = lv_label_create(parent_obj);
             objects.vel_txt = obj;
-            lv_obj_set_pos(obj, 613, 138);
+            lv_obj_set_pos(obj, 107, 293);
             lv_obj_set_size(obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+            lv_obj_set_style_text_font(obj, &lv_font_montserrat_48, LV_PART_MAIN | LV_STATE_DEFAULT);
             lv_label_set_text(obj, "");
         }
         {
             // temp_txt
             lv_obj_t *obj = lv_label_create(parent_obj);
             objects.temp_txt = obj;
-            lv_obj_set_pos(obj, 614, 183);
+            lv_obj_set_pos(obj, 107, 362);
             lv_obj_set_size(obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+            lv_obj_set_style_text_font(obj, &lv_font_montserrat_48, LV_PART_MAIN | LV_STATE_DEFAULT);
             lv_label_set_text(obj, "");
         }
     }

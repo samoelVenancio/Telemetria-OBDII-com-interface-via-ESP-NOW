@@ -93,7 +93,7 @@
           "template": "#if defined(EEZ_FOR_LVGL)\n#include <eez/core/vars.h>\n#endif\n\n#include \"ui.h\"\n#include \"screens.h\"\n#include \"images.h\"\n#include \"actions.h\"\n#include \"vars.h\"\n\n//${eez-studio GUI_ASSETS_DEF}\n\n//${eez-studio LVGL_NATIVE_VARS_TABLE_DEF}\n\n//${eez-studio LVGL_ACTIONS_ARRAY_DEF}\n\n#if defined(EEZ_FOR_LVGL)\n\nvoid ui_init() {\n    eez_flow_init(assets, sizeof(assets), (lv_obj_t **)&objects, sizeof(objects), images, sizeof(images), actions);\n}\n\nvoid ui_tick() {\n    eez_flow_tick();\n    tick_screen(g_currentScreen);\n}\n\n#else\n\n#include <string.h>\n\nstatic int16_t currentScreen = -1;\n\nstatic lv_obj_t *getLvglObjectFromIndex(int32_t index) {\n    if (index == -1) {\n        return 0;\n    }\n    return ((lv_obj_t **)&objects)[index];\n}\n\nvoid loadScreen(enum ScreensEnum screenId) {\n    currentScreen = screenId - 1;\n    lv_obj_t *screen = getLvglObjectFromIndex(currentScreen);\n    lv_scr_load_anim(screen, LV_SCR_LOAD_ANIM_FADE_IN, 200, 0, false);\n}\n\nvoid ui_init() {\n    create_screens();\n//${eez-studio LVGL_LOAD_FIRST_SCREEN}\n}\n\nvoid ui_tick() {\n    tick_screen(currentScreen);\n}\n\n#endif\n"
         }
       ],
-      "destinationFolder": "..\\src\\ui",
+      "destinationFolder": "..\\projetos\\telemetria\\modulo-b-display\\eez",
       "separateFolderForImagesAndFonts": false,
       "imageExportMode": "source",
       "fontExportMode": "source",
@@ -171,10 +171,10 @@
             {
               "objID": "6b272cb8-48b4-467f-c130-a1edc1f930b7",
               "type": "LVGLLabelWidget",
-              "left": 356,
-              "top": 232,
-              "width": 89,
-              "height": 16,
+              "left": 244,
+              "top": 79,
+              "width": 312,
+              "height": 30,
               "customInputs": [],
               "customOutputs": [],
               "style": {
@@ -197,10 +197,17 @@
               "disabledStateType": "literal",
               "states": "",
               "localStyles": {
-                "objID": "b70b99db-02c2-420a-cbdf-e6366dc84e67"
+                "objID": "b70b99db-02c2-420a-cbdf-e6366dc84e67",
+                "definition": {
+                  "MAIN": {
+                    "DEFAULT": {
+                      "text_font": "MONTSERRAT_28"
+                    }
+                  }
+                }
               },
               "groupIndex": 0,
-              "text": "Hello, world!",
+              "text": "Hello, world! Porraaaa",
               "textType": "literal",
               "longMode": "WRAP",
               "recolor": false,
@@ -209,10 +216,10 @@
             {
               "objID": "4f9e9f61-aecc-4a1f-bf3f-8262f71e6ce5",
               "type": "LVGLLabelWidget",
-              "left": 612,
-              "top": 97,
-              "width": 68,
-              "height": 16,
+              "left": 107,
+              "top": 222,
+              "width": 228,
+              "height": 52,
               "customInputs": [],
               "customOutputs": [],
               "style": {
@@ -240,7 +247,14 @@
               "disabledStateType": "literal",
               "states": "",
               "localStyles": {
-                "objID": "120c46f7-c82a-4834-c05c-49319d546c27"
+                "objID": "120c46f7-c82a-4834-c05c-49319d546c27",
+                "definition": {
+                  "MAIN": {
+                    "DEFAULT": {
+                      "text_font": "MONTSERRAT_48"
+                    }
+                  }
+                }
               },
               "group": "",
               "groupIndex": 0,
@@ -253,10 +267,10 @@
             {
               "objID": "0a05c56d-5b5a-4bac-f767-6ef1928d6e84",
               "type": "LVGLLabelWidget",
-              "left": 613,
-              "top": 138,
-              "width": 58,
-              "height": 16,
+              "left": 107,
+              "top": 293,
+              "width": 193,
+              "height": 52,
               "customInputs": [],
               "customOutputs": [],
               "style": {
@@ -284,7 +298,14 @@
               "disabledStateType": "literal",
               "states": "",
               "localStyles": {
-                "objID": "8a3dc377-a3f7-43de-87b0-79cd827b67de"
+                "objID": "8a3dc377-a3f7-43de-87b0-79cd827b67de",
+                "definition": {
+                  "MAIN": {
+                    "DEFAULT": {
+                      "text_font": "MONTSERRAT_48"
+                    }
+                  }
+                }
               },
               "group": "",
               "groupIndex": 0,
@@ -297,10 +318,10 @@
             {
               "objID": "f5d6a71a-360c-466f-f224-1d57efbe6de0",
               "type": "LVGLLabelWidget",
-              "left": 614,
-              "top": 183,
-              "width": 76,
-              "height": 16,
+              "left": 107,
+              "top": 362,
+              "width": 255,
+              "height": 52,
               "customInputs": [],
               "customOutputs": [],
               "style": {
@@ -328,7 +349,14 @@
               "disabledStateType": "literal",
               "states": "",
               "localStyles": {
-                "objID": "ddcb2a54-a969-4a40-ebb9-176844a062c9"
+                "objID": "ddcb2a54-a969-4a40-ebb9-176844a062c9",
+                "definition": {
+                  "MAIN": {
+                    "DEFAULT": {
+                      "text_font": "MONTSERRAT_48"
+                    }
+                  }
+                }
               },
               "group": "",
               "groupIndex": 0,
