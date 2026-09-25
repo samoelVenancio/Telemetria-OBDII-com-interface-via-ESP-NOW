@@ -36,9 +36,20 @@ esp_err_t can_obd2_iniciar_escuta(uint16_t kbps);
 /* Escuta pela janela dada e conta quadros válidos e erros de barramento */
 can_obd2_escuta_t can_obd2_escutar(uint32_t janela_ms);
 
+/* SÓ BANCADA. Instala o driver em modo NORMAL na taxa pedida, sem filtro, e
+ * conta quadros válidos na janela. Em modo normal nós damos ACK: na taxa
+ * certa os quadros do simulador fecham; na errada só aparecem erros. Nunca
+ * usar no carro — transmitir numa taxa não provada gera quadros de erro no
+ * barramento do veículo. */
+can_obd2_escuta_t can_obd2_sondar_normal(uint16_t kbps, uint32_t janela_ms);
+
 /* Reinstala o driver em TWAI_MODE_NORMAL, na mesma taxa da escuta, com
  * filtro de hardware para 0x7E8. Só chamar depois de confirmar tráfego. */
 esp_err_t can_obd2_modo_normal(void);
+
+/* Quantas vezes seguidas o controlador caiu em bus-off sem nenhuma resposta
+ * válida no meio. Zera a cada resposta boa do ECM. */
+uint32_t can_obd2_bus_off_seguidos(void);
 
 /* Requisita um PID do Modo 01 (single frame) e espera a resposta do ECM.
  * Em sucesso, copia os bytes de dados (A, B, ...) para 'resposta' e escreve a

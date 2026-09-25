@@ -57,6 +57,7 @@ static const char *TAG = "can_obd2";
 static int64_t s_ultima_atividade_ms = 0;
 static uint16_t s_kbps = CAN_KBPS_CARRO;
 static bool s_instalado = false;
+static uint32_t s_bus_off_seguidos = 0;
 
 static int64_t agora_ms(void)
 {
@@ -191,6 +192,50 @@ can_obd2_escuta_t can_obd2_escutar(uint32_t janela_ms)
     return res;
 }
 
+can_obd2_escuta_t can_obd2_sondar_normal(uint16_t kbps, uint32_t janela_ms)
+{
+    ESP_LOGI(TAG, "BANCADA: sondando %u kbit/s em modo normal (com ACK)", kbps);
+    can_obd2_escuta_t vazio = { 0 };
+    if (instalar_driver(TWAI_MODE_NORMAL, kbps, false) != ESP_OK) {
+        return vazio;
+    }
+    return can_obd2_escutar(janela_ms);
+}
+
+/* Bus-off: o controlador passou de 255 erros de transmissão e se desligou do
+ * barramento (regra do próprio CAN, para um nó defeituoso não derrubar a
+ * rede). A saída exige recuperação explícita: initiate_recovery espera 128
+ * ocorrências de 11 bits recessivos, o driver vai para STOPPED e só então
+ * twai_start() religa. Retorna ESP_OK se o driver está pronto para transmitir. */
+static esp_err_t garantir_driver_ativo(void)
+{
+    twai_status_info_t st;
+    if (twai_get_status_info(&st) != ESP_OK) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    switch (st.state) {
+    case TWAI_STATE_RUNNING:
+        return ESP_OK;
+    case TWAI_STATE_BUS_OFF:
+        s_bus_off_seguidos++;
+        ESP_LOGW(TAG, "bus-off a %u kbit/s (%lu seguido(s)) — iniciando recuperacao",
+                 s_kbps, (unsigned long)s_bus_off_seguidos);
+        twai_initiate_recovery();
+        return ESP_ERR_INVALID_STATE;
+    case TWAI_STATE_STOPPED:
+        /* recuperação concluída: religa */
+        return twai_start();
+    case TWAI_STATE_RECOVERING:
+    default:
+        return ESP_ERR_INVALID_STATE;
+    }
+}
+
+uint32_t can_obd2_bus_off_seguidos(void)
+{
+    return s_bus_off_seguidos;
+}
+
 esp_err_t can_obd2_modo_normal(void)
 {
     ESP_LOGI(TAG, "TWAI em modo normal a %u kbit/s, filtro de HW para 0x%03X",
@@ -207,6 +252,11 @@ esp_err_t can_obd2_requisitar_pid(uint8_t pid, uint8_t *resposta,
                                   size_t *tamanho, uint32_t timeout_ms)
 {
     twai_message_t msg;
+
+    esp_err_t estado = garantir_driver_ativo();
+    if (estado != ESP_OK) {
+        return estado; /* PID fica inválido; o laço segue e tenta de novo */
+    }
 
     /* Drena respostas velhas que tenham ficado na fila (ex.: resposta que
      * chegou depois do timeout da requisição anterior) para não casar a
@@ -255,6 +305,7 @@ esp_err_t can_obd2_requisitar_pid(uint8_t pid, uint8_t *resposta,
         }
         memcpy(resposta, &msg.data[3], n);
         *tamanho = n;
+        s_bus_off_seguidos = 0; /* barramento saudável de novo */
         return ESP_OK;
     }
     return ESP_ERR_TIMEOUT;

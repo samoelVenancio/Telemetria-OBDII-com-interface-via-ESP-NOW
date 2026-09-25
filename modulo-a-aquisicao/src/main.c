@@ -21,6 +21,7 @@
  * tasks não é por paralelismo, é para a cadência de envio (10 Hz firmes, via
  * vTaskDelayUntil) não depender do tempo variável do ciclo OBD2.
  */
+#include <stdlib.h>
 #include <string.h>
 
 #include "freertos/FreeRTOS.h"
@@ -52,6 +53,9 @@ static const char *TAG = "principal";
 #define PERIODO_ENVIO_ESPNOW_MS   100u   /* 10 Hz */
 #define JANELA_ESCUTA_BOOT_MS     3000u  /* escuta obrigatória antes de transmitir */
 #define RPM_MINIMO_MOTOR_LIGADO   400u   /* abaixo disso é partida/bounce, não marcha lenta */
+#define JANELA_SONDA_BANCADA_MS   500u   /* simulador manda fundo a cada 50 ms: ~10 quadros */
+#define LIMITE_BUS_OFF_SEGUIDOS   3u     /* passou disso: reinicia e refaz a detecção do barramento */
+#define PERIODO_LOG_RESUMO_MS     5000u  /* resumo no monitor serial */
 
 /* Capacidade do tanque para converter nível % em litros.
  * TODO: confirmar no manual do New Fiesta hatch (valor de placa: 48 L). */
@@ -103,6 +107,15 @@ static void tarefa_aquisicao(void *arg)
             s_dados = novo;
             s_consumo = c;
             portEXIT_CRITICAL(&s_trava_dados);
+        }
+
+        /* Bus-off repetido: a recuperação não resolve (taxa mudou, fiação,
+         * simulador trocado de taxa). Reiniciar refaz a detecção do barramento
+         * pelo mesmo caminho seguro do boot, em vez de insistir no escuro. */
+        if (can_obd2_bus_off_seguidos() >= LIMITE_BUS_OFF_SEGUIDOS) {
+            ESP_LOGE(TAG, "%u bus-off seguidos — reiniciando para refazer a deteccao",
+                     (unsigned)LIMITE_BUS_OFF_SEGUIDOS);
+            esp_restart(); /* não retorna */
         }
 
         /* Carro dormiu? (deep sleep lá dentro se sim — não retorna) */
@@ -168,6 +181,18 @@ static void tarefa_envio(void *arg)
 
         enlace_espnow_enviar(&p); /* completa magic/versão/seq/CRC e transmite */
 
+        /* Resumo periódico no serial: prova de vida do ciclo inteiro */
+        static int64_t ultimo_log_ms = 0;
+        int64_t agora_ms = esp_timer_get_time() / 1000;
+        if (agora_ms - ultimo_log_ms >= PERIODO_LOG_RESUMO_MS) {
+            ultimo_log_ms = agora_ms;
+            ESP_LOGI(TAG, "CAN %u kbit/s | rpm %u vel %u temp %d.%d | dados %s | seq %u",
+                     can_obd2_taxa_atual(), p.rpm, p.velocidade,
+                     p.temp_arref_d / 10, abs(p.temp_arref_d % 10),
+                     (p.flags & TELEM_FLAG_DADOS_VALIDOS) ? "validos" : "INVALIDOS",
+                     p.seq);
+        }
+
         /* Pedido de troca de taxa vindo da tela do Módulo B */
         uint16_t kbps_pedida = enlace_espnow_consumir_taxa_pedida();
         if (kbps_pedida != 0 && kbps_pedida != can_obd2_taxa_atual()) {
@@ -215,13 +240,29 @@ static bool confirmar_barramento(void)
         return false;
     }
 
-#if CAN_BANCADA_ACEITA_SEM_ACK
-    ESP_LOGW(TAG, "BANCADA: %lu erro(s) sem quadro valido — tratado como simulador "
-                  "sem 3o no para dar ACK. Seguindo a %u kbit/s",
-             (unsigned long)e.erros_barramento, kbps);
-    return true;
-#else
     uint16_t outra = (kbps == CAN_KBPS_CARRO) ? CAN_KBPS_BANCADA : CAN_KBPS_CARRO;
+
+#if CAN_BANCADA_ACEITA_SEM_ACK
+    /* Bancada: a escuta não prova a taxa (sem 3º nó ninguém dá ACK), então
+     * sonda em modo NORMAL, onde nós mesmos damos o ACK. Na taxa certa os
+     * quadros de fundo do simulador passam a fechar; na errada, só erros.
+     * Transmitir numa taxa errada aqui é inofensivo — só existe o simulador. */
+    ESP_LOGW(TAG, "BANCADA: %lu erro(s) sem quadro valido em escuta — sondando as taxas",
+             (unsigned long)e.erros_barramento);
+    const uint16_t candidatas[] = { kbps, outra };
+    for (size_t i = 0; i < sizeof(candidatas) / sizeof(candidatas[0]); i++) {
+        e = can_obd2_sondar_normal(candidatas[i], JANELA_SONDA_BANCADA_MS);
+        if (e.quadros_validos > 0) {
+            if (candidatas[i] != kbps) {
+                can_obd2_salvar_taxa(candidatas[i]);
+            }
+            ESP_LOGI(TAG, "BANCADA: simulador respondendo a %u kbit/s", candidatas[i]);
+            return true;
+        }
+    }
+    ESP_LOGW(TAG, "BANCADA: nenhuma taxa fechou quadro — simulador desligado ou fiacao?");
+    return false;
+#else
     ESP_LOGW(TAG, "so erros a %u kbit/s — taxa errada? testando %u kbit/s em escuta",
              kbps, outra);
     ESP_ERROR_CHECK(can_obd2_iniciar_escuta(outra));

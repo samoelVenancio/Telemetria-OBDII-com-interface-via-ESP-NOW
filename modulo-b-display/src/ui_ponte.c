@@ -42,6 +42,7 @@ static const char *TAG = "ui_ponte";
 #define PONTE_JANELA_TAXA_MS      1000   /* taxa efetiva medida a cada 1 s */
 #define PONTE_TIMEOUT_PEDIDO_MS   15000  /* Módulo A reinicia + escuta 3 s; folga generosa */
 #define PONTE_TXT_MAX             40
+#define PONTE_PERIODO_LOG_MS      5000   /* resumo do enlace no serial */
 #define PONTE_RPM_ESCALA_MAXIMA   7000
 
 /* Passos dos ajustes do alarme por toque */
@@ -249,6 +250,19 @@ static void ao_disparar_timer(lv_timer_t *timer)
     atualizar_alarme(alarme);
     atualizar_enlace(&enlace, tem, ok);
     atualizar_config(&p, ok);
+
+    /* Resumo no serial a cada 5 s: mostra se o enlace está vivo sem precisar
+     * olhar a tela. Log a 0,2 Hz na task do LVGL não atrapalha o desenho. */
+    static int64_t ultimo_log_ms = 0;
+    int64_t agora = agora_ms();
+    if (agora - ultimo_log_ms >= PONTE_PERIODO_LOG_MS) {
+        ultimo_log_ms = agora;
+        ESP_LOGI(TAG, "enlace %s | rx %lu perdidos %lu invalidos %lu rssi %d | rpm %u dados %s",
+                 ok ? "OK" : "SEM SINAL",
+                 (unsigned long)enlace.recebidos, (unsigned long)enlace.perdidos,
+                 (unsigned long)enlace.invalidos, (int)enlace.rssi_dbm, p.rpm,
+                 (p.flags & TELEM_FLAG_DADOS_VALIDOS) ? "validos" : "INVALIDOS");
+    }
 
     /* Código gerado pelo EEZ: lê os get_var_*() da tela atual e só redesenha
      * o que mudou */
