@@ -1,0 +1,18 @@
+# PlatformIO
+.pio/
+.vscode/
+
+# ESP-IDF — gerados pelo build (o sdkconfig.defaults é fonte, os demais não)
+sdkconfig
+sdkconfig.*
+!sdkconfig.defaults
+build/
+managed_components/
+dependencies.lock
+
+# Diversos
+__pycache__/
+*.pyc
+
+# EEZ Studio — estado da janela do editor (por usuário)
+*.eez-project-ui-state

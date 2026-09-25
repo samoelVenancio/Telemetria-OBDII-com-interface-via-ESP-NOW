@@ -1,0 +1,4 @@
+# Módulo A não usa componentes do registry: TWAI, ESP-NOW, NVS e deep sleep
+# são todos built-in do ESP-IDF. O arquivo existe para fixar a faixa de IDF.
+dependencies:
+  idf: ">=5.1,<6.0"

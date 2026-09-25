@@ -1,0 +1,9 @@
+# Módulo B — ESP32-S3 N16R8, flash de 16 MB
+# App de 8 MB: imagens de fundo 800x480 em RGB565 (~750 KB cada) embutidas no
+# binário estouram a tabela padrão de 1 MB — por isso a partição gorda.
+# Sobra uma partição de dados para assets carregados em runtime (fase 2).
+# Name,     Type, SubType, Offset,   Size,      Flags
+nvs,        data, nvs,     0x9000,   0x6000,
+phy_init,   data, phy,     0xF000,   0x1000,
+factory,    app,  factory, 0x10000,  0x800000,
+imagens,    data, spiffs,  0x810000, 0x7E0000,

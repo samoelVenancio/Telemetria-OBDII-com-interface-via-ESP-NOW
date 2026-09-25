@@ -1,0 +1,7 @@
+# Dependências do IDF Component Registry — intervalos abertos compatíveis
+# (caret: aceita minor/patch novos, trava o major).
+dependencies:
+  idf: ">=5.1,<6.0"
+  lvgl/lvgl: "^9.0.0"
+  espressif/esp_lvgl_port: "^2.0.0"
+  espressif/esp_lcd_touch_gt911: "^1.0.0"

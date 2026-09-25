@@ -1,0 +1,56 @@
+# ============================================================================
+# Módulo B — exibição (ESP32-S3 N16R8 + painel RGB 800x480)
+# ============================================================================
+
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+
+# Tick de 1 ms: melhora a resolução do tick do LVGL e do timer de UI a 10 Hz
+CONFIG_FREERTOS_HZ=1000
+
+# --- Flash: N16R8 = 16 MB em QIO a 80 MHz ---
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
+
+# --- PSRAM: 8 MB OCTAL a 80 MHz (os dois framebuffers do painel moram aqui) ---
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_SPEED_80M=y
+# Código e rodata executando da PSRAM liberam o cache da flash; sem isso,
+# operações de flash (log, NVS) roubam banda do barramento e o painel RGB
+# perde sincronismo (tela "rasga" ou desloca).
+CONFIG_SPIRAM_FETCH_INSTRUCTIONS=y
+CONFIG_SPIRAM_RODATA=y
+# Alocações pequenas ficam na SRAM interna (DMA e structs de driver)
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=4096
+
+# --- Cache: máximo de banda para o varrimento contínuo do painel ---
+CONFIG_ESP32S3_DATA_CACHE_64KB=y
+CONFIG_ESP32S3_DATA_CACHE_LINE_64B=y
+
+# ISR do LCD RGB em IRAM: continua alimentando o painel mesmo durante
+# operações de flash — par com o bounce buffer em SRAM (display_init.c)
+CONFIG_LCD_RGB_ISR_IRAM_SAFE=y
+
+# --- Tabela de partições própria (app de 8 MB) ---
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# --- LVGL 9 ---
+CONFIG_LV_COLOR_DEPTH_16=y
+# Fontes Montserrat embutidas. O EEZ Studio só oferece as que existem aqui:
+# se usar um tamanho novo no EEZ, habilite a linha correspondente e apague o
+# sdkconfig.<env> gerado para ele ser refeito. App de 8 MB comporta todas.
+CONFIG_LV_FONT_MONTSERRAT_12=y
+CONFIG_LV_FONT_MONTSERRAT_16=y
+CONFIG_LV_FONT_MONTSERRAT_18=y
+CONFIG_LV_FONT_MONTSERRAT_20=y
+CONFIG_LV_FONT_MONTSERRAT_24=y
+CONFIG_LV_FONT_MONTSERRAT_28=y
+CONFIG_LV_FONT_MONTSERRAT_32=y
+CONFIG_LV_FONT_MONTSERRAT_36=y
+CONFIG_LV_FONT_MONTSERRAT_40=y
+CONFIG_LV_FONT_MONTSERRAT_48=y
+
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y

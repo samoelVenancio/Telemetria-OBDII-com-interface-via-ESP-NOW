@@ -1,0 +1,55 @@
+/**
+ * can_obd2.h — Acesso ao barramento CAN do veículo via TWAI e diálogo
+ * OBD2 (ISO 15765-4, 11 bits) com o ECM. Taxa configurável: 500 kbit/s no
+ * Fiesta, 250 kbit/s no simulador de bancada.
+ */
+#pragma once
+
+#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
+#include "esp_err.h"
+
+#define CAN_KBPS_CARRO    500u  /* taxa medida no New Fiesta (padrão de fábrica) */
+#define CAN_KBPS_BANCADA  250u  /* taxa do simulador Arduino+MCP2515 */
+
+/* Resultado de uma janela de escuta em listen-only */
+typedef struct {
+    uint32_t quadros_validos;   /* quadros completos recebidos */
+    uint32_t erros_barramento;  /* erros de bit/stuff/forma/CRC/ACK vistos */
+} can_obd2_escuta_t;
+
+/* Taxa gravada na NVS (CAN_KBPS_CARRO se vazia ou inválida) */
+uint16_t can_obd2_taxa_salva(void);
+
+/* Grava a taxa na NVS. Só 250 e 500 são aceitas. Passa a valer no próximo boot. */
+esp_err_t can_obd2_salvar_taxa(uint16_t kbps);
+
+/* Taxa com que o driver está instalado agora */
+uint16_t can_obd2_taxa_atual(void);
+
+/* Instala o driver TWAI em TWAI_MODE_LISTEN_ONLY na taxa pedida (não gera
+ * ACK, não gera quadro de erro, não transmite). Se já houver driver
+ * instalado, reinstala. */
+esp_err_t can_obd2_iniciar_escuta(uint16_t kbps);
+
+/* Escuta pela janela dada e conta quadros válidos e erros de barramento */
+can_obd2_escuta_t can_obd2_escutar(uint32_t janela_ms);
+
+/* Reinstala o driver em TWAI_MODE_NORMAL, na mesma taxa da escuta, com
+ * filtro de hardware para 0x7E8. Só chamar depois de confirmar tráfego. */
+esp_err_t can_obd2_modo_normal(void);
+
+/* Requisita um PID do Modo 01 (single frame) e espera a resposta do ECM.
+ * Em sucesso, copia os bytes de dados (A, B, ...) para 'resposta' e escreve a
+ * quantidade em 'tamanho' (máx. 5 num single frame). Retorna ESP_ERR_TIMEOUT
+ * se o ECM não responder dentro de 'timeout_ms'. */
+esp_err_t can_obd2_requisitar_pid(uint8_t pid, uint8_t *resposta,
+                                  size_t *tamanho, uint32_t timeout_ms);
+
+/* Timestamp (ms desde o boot) do último quadro visto no barramento —
+ * insumo da gestão de energia (energia.c). */
+int64_t can_obd2_ultima_atividade_ms(void);
+
+/* FASE 2 — STUB. Leitura de DTCs (Modo 03). Ver comentário no .c. */
+esp_err_t can_obd2_ler_dtcs(uint16_t *codigos, size_t maximo, size_t *quantidade);

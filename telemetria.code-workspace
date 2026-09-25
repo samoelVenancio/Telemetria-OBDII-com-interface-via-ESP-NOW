@@ -1,0 +1,37 @@
+{
+  // Abra ESTE arquivo no VS Code (File > Open Workspace from File...).
+  //
+  // Por que um workspace e não a pasta prog/:
+  //  - A extensão do PlatformIO só reconhece projetos cujo platformio.ini está
+  //    na raiz de uma pasta do workspace. Abrindo prog/ direto ela não acha
+  //    nenhum: somem os botões de build/upload e o IntelliSense acusa erro em
+  //    todo #include do ESP-IDF.
+  //  - Aqui cada módulo é uma pasta do workspace (PlatformIO reconhece cada
+  //    um), e o Git continua vendo UM repositório só (o .git fica em prog/):
+  //    um commit leva as mudanças dos dois módulos juntas.
+  //
+  // Para trocar o projeto ativo do PlatformIO: barra inferior, ícone de pasta
+  // "Default (...)" -> escolha o módulo.
+  // A Raiz vem PRIMEIRO de propósito: ferramentas que usam "a pasta do
+  // workspace" (ex.: Claude Code, terminal padrão) pegam a primeira da lista,
+  // e o projeto como um todo é prog/.
+  "folders": [
+    { "name": "Raiz (README, git)", "path": "." },
+    { "name": "Módulo A (aquisição)", "path": "modulo-a-aquisicao" },
+    { "name": "Módulo B (display)", "path": "modulo-b-display" },
+    { "name": "Simulador ECM (Arduino)", "path": "ferramentas/simulador-ecu-mcp2515" },
+    { "name": "Contrato comum", "path": "comum" }
+  ],
+  "settings": {
+    "files.encoding": "utf8",
+    // Na pasta "Raiz" os módulos apareceriam de novo; abrir um .c por ali
+    // usaria a config de IntelliSense errada. Eles ficam ocultos só na Raiz
+    // (as outras pastas não têm subpastas com esses nomes).
+    "files.exclude": {
+      "modulo-a-aquisicao": true,
+      "modulo-b-display": true,
+      "ferramentas": true,
+      "comum": true
+    }
+  }
+}
