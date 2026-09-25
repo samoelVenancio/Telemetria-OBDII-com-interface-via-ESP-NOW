@@ -17,6 +17,7 @@ enum ScreensEnum {
 
 typedef struct _objects_t {
     lv_obj_t *principal;
+    lv_obj_t *obj0;
     lv_obj_t *rpm_txt;
     lv_obj_t *vel_txt;
     lv_obj_t *temp_txt;
