@@ -259,11 +259,33 @@ static void ao_disparar_timer(lv_timer_t *timer)
  * Actions (ligadas no EEZ ao evento CLICKED dos botões)
  * ------------------------------------------------------------------------- */
 
-void action_ir_principal(lv_event_t *e) { (void)e; loadScreen(SCREEN_ID_PRINCIPAL); }
-void action_ir_alarme(lv_event_t *e)    { (void)e; loadScreen(SCREEN_ID_ALARME); }
-void action_ir_dtc(lv_event_t *e)       { (void)e; loadScreen(SCREEN_ID_DTC); }
-void action_ir_enlace(lv_event_t *e)    { (void)e; loadScreen(SCREEN_ID_ENLACE); }
-void action_ir_config(lv_event_t *e)    { (void)e; loadScreen(SCREEN_ID_CONFIG); }
+/* Navegação por POSIÇÃO da tela no projeto EEZ (1 = primeira da lista), e
+ * não por SCREEN_ID_<NOME>: assim o firmware compila com qualquer número de
+ * telas no EEZ. O EEZ sempre gera _SCREEN_ID_LAST; ir para uma tela que
+ * ainda não existe vira no-op (sem isso, loadScreen indexaria um widget
+ * qualquer da struct objects como se fosse tela e o firmware travaria). */
+enum {
+    POS_TELA_PRINCIPAL = 1,
+    POS_TELA_ALARME    = 2,
+    POS_TELA_DTC       = 3,
+    POS_TELA_ENLACE    = 4,
+    POS_TELA_CONFIG    = 5,
+};
+
+static void ir_para(int posicao)
+{
+    if (posicao >= 1 && posicao <= _SCREEN_ID_LAST) {
+        loadScreen((enum ScreensEnum)posicao);
+    } else {
+        ESP_LOGW(TAG, "tela %d ainda nao existe no projeto EEZ", posicao);
+    }
+}
+
+void action_ir_principal(lv_event_t *e) { (void)e; ir_para(POS_TELA_PRINCIPAL); }
+void action_ir_alarme(lv_event_t *e)    { (void)e; ir_para(POS_TELA_ALARME); }
+void action_ir_dtc(lv_event_t *e)       { (void)e; ir_para(POS_TELA_DTC); }
+void action_ir_enlace(lv_event_t *e)    { (void)e; ir_para(POS_TELA_ENLACE); }
+void action_ir_config(lv_event_t *e)    { (void)e; ir_para(POS_TELA_CONFIG); }
 
 static int16_t limitar_i16(int32_t v, int16_t minimo, int16_t maximo)
 {

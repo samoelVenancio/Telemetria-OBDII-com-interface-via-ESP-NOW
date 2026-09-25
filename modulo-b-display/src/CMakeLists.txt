@@ -2,9 +2,13 @@
 #
 # Os fontes de src/ui/ são GERADOS pelo EEZ Studio e o conjunto de arquivos
 # muda conforme o projeto (images.c, styles.c, fontes...). Por isso entram
-# por glob com CONFIGURE_DEPENDS: arquivo novo exportado pelo EEZ é visto no
-# próximo build sem mexer neste CMakeLists.
-file(GLOB UI_EEZ_SRCS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/ui/*.c")
+# por glob, sem listar um a um.
+#
+# Sem CONFIGURE_DEPENDS: o ESP-IDF também avalia este arquivo em modo script
+# (para levantar dependências), onde essa opção é inválida. Consequência:
+# quando o EEZ criar um .c NOVO, rode "Clean" no PlatformIO antes do build
+# para o CMake reler a pasta. Alterar arquivos que já existem não precisa.
+file(GLOB UI_EEZ_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/ui/*.c")
 
 idf_component_register(
     SRCS
