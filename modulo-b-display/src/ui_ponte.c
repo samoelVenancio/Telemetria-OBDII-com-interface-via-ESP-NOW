@@ -305,15 +305,6 @@ static void ao_navegar(lv_event_t *e)
     loadScreen(destino);
 }
 
-static void ao_deslizar_volta(lv_event_t *e)
-{
-    (void)e;
-    lv_indev_t *indev = lv_indev_active();
-    if (indev != NULL && lv_indev_get_gesture_dir(indev) == LV_DIR_RIGHT) {
-        loadScreen(SCREEN_ID_PRINCIPAL);
-    }
-}
-
 static void ao_trocar_campo(lv_event_t *e)
 {
     int campo = (int)(intptr_t)lv_event_get_user_data(e);
@@ -525,8 +516,6 @@ void ui_ponte_iniciar(void)
     colorir_icone(objects.return_layout);
     colorir_icone(objects.return_config);
     colorir_icone(objects.return_alarms);
-    /* Atalho: deslizar para a direita também volta ao menu */
-    lv_obj_add_event_cb(objects.painel_alarms, ao_deslizar_volta, LV_EVENT_GESTURE, NULL);
 
     preparar_tela_alarmes();
 
