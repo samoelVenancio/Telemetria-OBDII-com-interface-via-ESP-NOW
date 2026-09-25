@@ -28,6 +28,10 @@ static const char *TAG = "nvm_config";
 #define CHAVE_TANQUE    "tanque_dl"
 #define CHAVE_VE        "ve_milesimos"
 #define CHAVE_LAYOUT    "layout"        /* blob de NVM_LAYOUT_CAMPOS bytes */
+#define CHAVE_ALM_TEMP  "alm_temp_on"
+#define CHAVE_ALM_FRIO  "alm_frio_on"
+#define CHAVE_ECO_ON    "eco_on"
+#define CHAVE_ECO_RPM   "eco_rpm"
 
 /* Padrões de fábrica */
 #define PADRAO_LIMIAR_TEMP_D  1050   /* 105,0 °C — acima da faixa normal (~90-100) do 1.6 Sigma */
@@ -35,6 +39,7 @@ static const char *TAG = "nvm_config";
 #define PADRAO_JANELA_MEDIA   8      /* 8 amostras a 10 Hz ~= 0,8 s de suavização */
 #define PADRAO_TANQUE_DL      480    /* 48,0 L — TODO: confirmar no manual do New Fiesta */
 #define PADRAO_VE_MILESIMOS   850    /* VE 0,850 — mesmo padrão do Módulo A */
+#define PADRAO_ECO_RPM        3000   /* motor 1.6 aspirado: torque útil bem antes disso */
 
 static nvm_config_t s_cfg = {
     .limiar_temp_d = PADRAO_LIMIAR_TEMP_D,
@@ -45,6 +50,10 @@ static nvm_config_t s_cfg = {
     /* Padrão do painel: RPM, velocidade, temp. do motor | consumo, tanque,
      * bateria. Índices da tabela de grandezas de ui_ponte.c. */
     .layout = { 0, 1, 4, 2, 7, 9 },
+    .alarme_temp_on = 1,
+    .alarme_frio_on = 1,
+    .eco_on = 1,
+    .eco_rpm = PADRAO_ECO_RPM,
 };
 
 void nvm_config_iniciar(void)
@@ -60,6 +69,10 @@ void nvm_config_iniciar(void)
     nvs_get_u8(h, CHAVE_JANELA, &s_cfg.janela_media);
     nvs_get_u16(h, CHAVE_TANQUE, &s_cfg.tanque_dl);
     nvs_get_u16(h, CHAVE_VE, &s_cfg.ve_milesimos);
+    nvs_get_u8(h, CHAVE_ALM_TEMP, &s_cfg.alarme_temp_on);
+    nvs_get_u8(h, CHAVE_ALM_FRIO, &s_cfg.alarme_frio_on);
+    nvs_get_u8(h, CHAVE_ECO_ON, &s_cfg.eco_on);
+    nvs_get_u16(h, CHAVE_ECO_RPM, &s_cfg.eco_rpm);
     size_t tam = sizeof(s_cfg.layout);
     uint8_t layout[NVM_LAYOUT_CAMPOS];
     if (nvs_get_blob(h, CHAVE_LAYOUT, layout, &tam) == ESP_OK && tam == sizeof(layout)) {
@@ -87,7 +100,9 @@ esp_err_t nvm_config_salvar(const nvm_config_t *nova)
         nova->histerese_d < NVM_HISTERESE_MIN_D ||
         nova->histerese_d > NVM_HISTERESE_MAX_D ||
         nova->janela_media < NVM_JANELA_MIN ||
-        nova->janela_media > NVM_JANELA_MAX) {
+        nova->janela_media > NVM_JANELA_MAX ||
+        nova->eco_rpm < NVM_ECO_RPM_MIN ||
+        nova->eco_rpm > NVM_ECO_RPM_MAX) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -101,6 +116,10 @@ esp_err_t nvm_config_salvar(const nvm_config_t *nova)
     nvs_set_u8(h, CHAVE_JANELA, nova->janela_media);
     nvs_set_u16(h, CHAVE_TANQUE, nova->tanque_dl);
     nvs_set_u16(h, CHAVE_VE, nova->ve_milesimos);
+    nvs_set_u8(h, CHAVE_ALM_TEMP, nova->alarme_temp_on ? 1 : 0);
+    nvs_set_u8(h, CHAVE_ALM_FRIO, nova->alarme_frio_on ? 1 : 0);
+    nvs_set_u8(h, CHAVE_ECO_ON, nova->eco_on ? 1 : 0);
+    nvs_set_u16(h, CHAVE_ECO_RPM, nova->eco_rpm);
     r = nvs_commit(h);
     nvs_close(h);
 

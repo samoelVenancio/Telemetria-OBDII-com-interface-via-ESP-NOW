@@ -6,6 +6,7 @@
  *   Painel principal — 6 campos configuráveis (Value_1..6) + linha de status
  *   Painel layout    — 6 listas: qual grandeza aparece em cada campo
  *   Painel Config    — taxa do CAN do Módulo A, versão, status do ESP-NOW
+ *   Painel Alarms    — superaquecimento (limiar), motor frio, ECO (RPM de troca)
  *
  * Por que uma ponte e não código dentro de src/ui/:
  *  - src/ui/ é SOBRESCRITO a cada Build do EEZ; nada escrito à mão pode
@@ -50,6 +51,18 @@ static const char *TAG = "ui_ponte";
 #define PONTE_PERIODO_LOG_MS      5000   /* resumo do enlace no serial */
 #define PONTE_TIMEOUT_PEDIDO_MS   15000  /* Módulo A reinicia + detecta o CAN; folga generosa */
 #define PONTE_TXT_MAX             40
+
+/* Faixas dos sliders da tela Alarms (sobrepõem o que vier do EEZ) */
+#define SLIDER_TEMP_MIN_C         80
+#define SLIDER_TEMP_MAX_C         120
+#define SLIDER_ECO_MIN_RPM        NVM_ECO_RPM_MIN
+#define SLIDER_ECO_MAX_RPM        NVM_ECO_RPM_MAX
+#define SLIDER_ECO_PASSO_RPM      100    /* arredonda para centenas: 3000, 3100... */
+
+/* Motor frio: abaixo desta temperatura, giro acima do limite gasta o motor
+ * (óleo ainda grosso, folgas de dilatação ainda não assentadas) */
+#define MOTOR_FRIO_TEMP_D         600    /* 60,0 °C */
+#define MOTOR_FRIO_RPM_MAX        3000
 
 /* ---------------------------------------------------------------------------
  * Grandezas que podem ocupar um campo do painel. A ORDEM é a das opções nas
@@ -98,6 +111,8 @@ VAR_TEXTO(value_6)
 VAR_TEXTO(msg_status)
 VAR_TEXTO(status_espnow)
 VAR_TEXTO(rev_sys)
+VAR_TEXTO(temp_max_alarm)
+VAR_TEXTO(eco_mode_rpm)
 
 static char *const s_campos[NVM_LAYOUT_CAMPOS] = {
     s_value_1, s_value_2, s_value_3, s_value_4, s_value_5, s_value_6,
@@ -179,13 +194,21 @@ static void formatar_grandeza(char *dest, grandeza_t g, const telem_pacote_t *p)
 static void atualizar_painel(const telem_pacote_t *p, bool tem, bool ok,
                              alarme_estado_t alarme)
 {
-    /* Linha de status: o problema mais grave primeiro */
+    /* Linha de status: o problema mais grave primeiro. Sem enlace ou sem
+     * dados do CAN, nenhum alarme pode ser avaliado — por isso vêm antes. */
+    const nvm_config_t *cfg = nvm_config();
+    bool dados = ok && (p->flags & TELEM_FLAG_DADOS_VALIDOS);
     if (!ok) {
         strcpy(s_msg_status, tem ? "Sem sinal do modulo A" : "Aguardando modulo A");
-    } else if (alarme == ALARME_ATIVO) {
-        fmt_escalado(s_msg_status, "ALARME: motor a ", alarme_media_d(), 1, "°C");
-    } else if (!(p->flags & TELEM_FLAG_DADOS_VALIDOS)) {
+    } else if (!dados) {
         strcpy(s_msg_status, "Aguardando dados do CAN");
+    } else if (cfg->alarme_temp_on && alarme == ALARME_ATIVO) {
+        fmt_escalado(s_msg_status, "ALARME: motor a ", alarme_media_d(), 1, "°C");
+    } else if (cfg->alarme_frio_on && p->temp_arref_d < MOTOR_FRIO_TEMP_D &&
+               p->rpm > MOTOR_FRIO_RPM_MAX) {
+        strcpy(s_msg_status, "Motor frio: alivie o giro");
+    } else if (cfg->eco_on && p->velocidade > 0 && p->rpm > cfg->eco_rpm) {
+        strcpy(s_msg_status, "ECO: troque de marcha");
     } else {
         strcpy(s_msg_status, "OK");
     }
@@ -282,6 +305,15 @@ static void ao_navegar(lv_event_t *e)
     loadScreen(destino);
 }
 
+static void ao_deslizar_volta(lv_event_t *e)
+{
+    (void)e;
+    lv_indev_t *indev = lv_indev_active();
+    if (indev != NULL && lv_indev_get_gesture_dir(indev) == LV_DIR_RIGHT) {
+        loadScreen(SCREEN_ID_PRINCIPAL);
+    }
+}
+
 static void ao_trocar_campo(lv_event_t *e)
 {
     int campo = (int)(intptr_t)lv_event_get_user_data(e);
@@ -329,6 +361,116 @@ static void ao_retry(lv_event_t *e)
     ESP_LOGI(TAG, "Retry: estatisticas do enlace zeradas");
 }
 
+/* ---------- Tela Alarms ---------- */
+
+static void atualizar_textos_alarmes(void)
+{
+    const nvm_config_t *cfg = nvm_config();
+    snprintf(s_temp_max_alarm, PONTE_TXT_MAX, "%d °C", cfg->limiar_temp_d / 10);
+    snprintf(s_eco_mode_rpm, PONTE_TXT_MAX, "%u rpm", (unsigned)cfg->eco_rpm);
+}
+
+static void salvar_config(const nvm_config_t *nova)
+{
+    esp_err_t r = nvm_config_salvar(nova);
+    if (r == ESP_OK) {
+        alarme_reconfigurar(); /* limiar novo vale já, com a média zerada */
+    } else {
+        ESP_LOGW(TAG, "config de alarmes rejeitada: %s", esp_err_to_name(r));
+    }
+    atualizar_textos_alarmes();
+}
+
+static uint16_t eco_do_slider(lv_obj_t *slider)
+{
+    int32_t v = lv_slider_get_value(slider);
+    v = ((v + SLIDER_ECO_PASSO_RPM / 2) / SLIDER_ECO_PASSO_RPM) * SLIDER_ECO_PASSO_RPM;
+    return (uint16_t)v;
+}
+
+/* Enquanto arrasta: só o texto acompanha (sem gravar na flash) */
+static void ao_arrastar_temp(lv_event_t *e)
+{
+    snprintf(s_temp_max_alarm, PONTE_TXT_MAX, "%ld °C",
+             (long)lv_slider_get_value(lv_event_get_target_obj(e)));
+}
+
+static void ao_arrastar_eco(lv_event_t *e)
+{
+    snprintf(s_eco_mode_rpm, PONTE_TXT_MAX, "%u rpm",
+             (unsigned)eco_do_slider(lv_event_get_target_obj(e)));
+}
+
+/* Ao soltar: grava. Uma escrita por ajuste, não uma por pixel arrastado. */
+static void ao_soltar_temp(lv_event_t *e)
+{
+    nvm_config_t nova = *nvm_config();
+    nova.limiar_temp_d = (int16_t)(lv_slider_get_value(lv_event_get_target_obj(e)) * 10);
+    salvar_config(&nova);
+}
+
+static void ao_soltar_eco(lv_event_t *e)
+{
+    nvm_config_t nova = *nvm_config();
+    nova.eco_rpm = eco_do_slider(lv_event_get_target_obj(e));
+    salvar_config(&nova);
+}
+
+/* Switches: user_data diz qual campo da config o switch controla */
+enum { SW_TEMP = 0, SW_FRIO, SW_ECO };
+
+static void ao_trocar_switch(lv_event_t *e)
+{
+    lv_obj_t *sw = lv_event_get_target_obj(e);
+    uint8_t ligado = lv_obj_has_state(sw, LV_STATE_CHECKED) ? 1 : 0;
+    nvm_config_t nova = *nvm_config();
+    switch ((int)(intptr_t)lv_event_get_user_data(e)) {
+    case SW_TEMP: nova.alarme_temp_on = ligado; break;
+    case SW_FRIO: nova.alarme_frio_on = ligado; break;
+    case SW_ECO:  nova.eco_on = ligado; break;
+    default: return;
+    }
+    salvar_config(&nova);
+}
+
+static void preparar_switch(lv_obj_t *sw, bool ligado, int qual)
+{
+    if (sw == NULL) {
+        return;
+    }
+    if (ligado) {
+        lv_obj_add_state(sw, LV_STATE_CHECKED);
+    } else {
+        lv_obj_remove_state(sw, LV_STATE_CHECKED);
+    }
+    lv_obj_add_event_cb(sw, ao_trocar_switch, LV_EVENT_VALUE_CHANGED, (void *)(intptr_t)qual);
+}
+
+static void preparar_slider(lv_obj_t *sl, int32_t min, int32_t max, int32_t valor,
+                            lv_event_cb_t ao_arrastar, lv_event_cb_t ao_soltar)
+{
+    if (sl == NULL) {
+        return;
+    }
+    lv_slider_set_range(sl, min, max);
+    lv_slider_set_value(sl, valor, LV_ANIM_OFF);
+    lv_obj_add_event_cb(sl, ao_arrastar, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(sl, ao_soltar, LV_EVENT_RELEASED, NULL);
+}
+
+static void preparar_tela_alarmes(void)
+{
+    const nvm_config_t *cfg = nvm_config();
+    preparar_switch(objects.max_temp_alarm_sw, cfg->alarme_temp_on, SW_TEMP);
+    preparar_switch(objects.cold_engine_alarm_sw, cfg->alarme_frio_on, SW_FRIO);
+    preparar_switch(objects.eco_mode_sw, cfg->eco_on, SW_ECO);
+    preparar_slider(objects.slide_max_temp, SLIDER_TEMP_MIN_C, SLIDER_TEMP_MAX_C,
+                    cfg->limiar_temp_d / 10, ao_arrastar_temp, ao_soltar_temp);
+    preparar_slider(objects.slide_eco_mode_rpm, SLIDER_ECO_MIN_RPM, SLIDER_ECO_MAX_RPM,
+                    cfg->eco_rpm, ao_arrastar_eco, ao_soltar_eco);
+    atualizar_textos_alarmes();
+}
+
 static void ligar_botao(lv_obj_t *botao, lv_event_cb_t cb, intptr_t dado)
 {
     if (botao != NULL) {
@@ -355,6 +497,12 @@ void ui_ponte_iniciar(void)
     ligar_botao(objects.return_painel, ao_navegar, SCREEN_ID_PRINCIPAL);
     ligar_botao(objects.return_layout, ao_navegar, SCREEN_ID_PRINCIPAL);
     ligar_botao(objects.return_config, ao_navegar, SCREEN_ID_PRINCIPAL);
+    ligar_botao(objects.btn_alarms, ao_navegar, SCREEN_ID_PAINEL_ALARMS);
+    ligar_botao(objects.return_alarms, ao_navegar, SCREEN_ID_PRINCIPAL);
+    /* Atalho: deslizar para a direita também volta ao menu */
+    lv_obj_add_event_cb(objects.painel_alarms, ao_deslizar_volta, LV_EVENT_GESTURE, NULL);
+
+    preparar_tela_alarmes();
 
     /* Listas do Painel layout: opções reais + seleção salva na NVS */
     lv_obj_t *listas[NVM_LAYOUT_CAMPOS] = {

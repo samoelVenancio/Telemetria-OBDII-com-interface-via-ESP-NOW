@@ -21,7 +21,9 @@ enum FlowGlobalVariables {
     FLOW_GLOBAL_VARIABLE_VALUE_6 = 5,
     FLOW_GLOBAL_VARIABLE_STATUS_ESPNOW = 6,
     FLOW_GLOBAL_VARIABLE_REV_SYS = 7,
-    FLOW_GLOBAL_VARIABLE_MSG_STATUS = 8
+    FLOW_GLOBAL_VARIABLE_MSG_STATUS = 8,
+    FLOW_GLOBAL_VARIABLE_TEMP_MAX_ALARM = 9,
+    FLOW_GLOBAL_VARIABLE_ECO_MODE_RPM = 10
 };
 
 // Native global variables
@@ -44,6 +46,10 @@ extern const char *get_var_rev_sys();
 extern void set_var_rev_sys(const char *value);
 extern const char *get_var_msg_status();
 extern void set_var_msg_status(const char *value);
+extern const char *get_var_temp_max_alarm();
+extern void set_var_temp_max_alarm(const char *value);
+extern const char *get_var_eco_mode_rpm();
+extern void set_var_eco_mode_rpm(const char *value);
 
 #ifdef __cplusplus
 }
