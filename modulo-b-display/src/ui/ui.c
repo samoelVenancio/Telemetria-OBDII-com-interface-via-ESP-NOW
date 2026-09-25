@@ -1,9 +1,6 @@
-/*
- * PLACEHOLDER — este arquivo será SOBRESCRITO pelo Build do EEZ Studio.
- * Reproduz o ui.c que o EEZ gera para projetos LVGL sem Flow.
- */
 #include "ui.h"
 #include "screens.h"
+#include "images.h"
 #include "actions.h"
 #include "vars.h"
 
@@ -21,12 +18,13 @@ static lv_obj_t *getLvglObjectFromIndex(int32_t index) {
 void loadScreen(enum ScreensEnum screenId) {
     currentScreen = screenId - 1;
     lv_obj_t *screen = getLvglObjectFromIndex(currentScreen);
-    lv_screen_load_anim(screen, LV_SCR_LOAD_ANIM_FADE_IN, 200, 0, false);
+    lv_scr_load_anim(screen, LV_SCR_LOAD_ANIM_FADE_IN, 200, 0, false);
 }
 
 void ui_init() {
     create_screens();
     loadScreen(SCREEN_ID_PRINCIPAL);
+
 }
 
 void ui_tick() {
