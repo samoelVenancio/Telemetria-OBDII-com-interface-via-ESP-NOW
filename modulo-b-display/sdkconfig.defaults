@@ -39,6 +39,10 @@ CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 
 # --- LVGL 9 ---
 CONFIG_LV_COLOR_DEPTH_16=y
+# Memória dos widgets pelo malloc do sistema, não pelo pool fixo de 64 KB do
+# LVGL: 5 telas do EEZ estourariam o pool. Com SPIRAM_MALLOC_ALWAYSINTERNAL
+# acima, blocos pequenos ficam na SRAM e os grandes vão para a PSRAM.
+CONFIG_LV_USE_CLIB_MALLOC=y
 # Fontes Montserrat embutidas. O EEZ Studio só oferece as que existem aqui:
 # se usar um tamanho novo no EEZ, habilite a linha correspondente e apague o
 # sdkconfig.<env> gerado para ele ser refeito. App de 8 MB comporta todas.

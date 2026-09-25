@@ -14,9 +14,12 @@ do EEZ sobrescreve esse placeholder.
 ## 1. Criar o projeto
 
 1. EEZ Studio → *New Project* → tipo **LVGL** (sem Flow).
-2. **LVGL version: 9.x.** O projeto de teste antigo era 8.4, mas este firmware usa LVGL 9.
+2. **LVGL version: 9.5.0.** O firmware está casado com essa versão (`~9.5.0` em
+   `src/idf_component.yml`). Se um dia trocar no EEZ, troque lá também.
 3. Display **800 × 480**.
-4. Salve o projeto **nesta pasta**: `modulo-b-display/eez/telemetria.eez-project`.
+4. Salve o projeto **nesta pasta**, com **"Create directory" desmarcado**:
+   `modulo-b-display/eez/<nome>.eez-project`. Marcado, ele cria uma subpasta e o
+   destino do Build passa a ser `../../src/ui`.
 5. Em *Settings → Build*:
    - **Destination folder:** `../src/ui`
    - **LVGL include:** `lvgl.h`. O padrão `lvgl/lvgl.h` **não compila** no

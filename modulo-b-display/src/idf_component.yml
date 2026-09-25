@@ -2,6 +2,9 @@
 # (caret: aceita minor/patch novos, trava o major).
 dependencies:
   idf: ">=5.1,<6.0"
-  lvgl/lvgl: "^9.0.0"
+  # Casado com a versão escolhida no projeto EEZ Studio (9.5.0): o código
+  # gerado pelo EEZ e o LVGL do firmware precisam ser da mesma minor.
+  # "~9.5.0" aceita correções 9.5.x, mas não pula para 9.6.
+  lvgl/lvgl: "~9.5.0"
   espressif/esp_lvgl_port: "^2.0.0"
   espressif/esp_lcd_touch_gt911: "^1.0.0"
