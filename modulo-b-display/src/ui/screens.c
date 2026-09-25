@@ -35,12 +35,63 @@ void create_screen_principal() {
             lv_obj_set_size(obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
             lv_label_set_text_static(obj, "Hello, world!");
         }
+        {
+            // rpm_txt
+            lv_obj_t *obj = lv_label_create(parent_obj);
+            objects.rpm_txt = obj;
+            lv_obj_set_pos(obj, 612, 97);
+            lv_obj_set_size(obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+            lv_label_set_text(obj, "");
+        }
+        {
+            // vel_txt
+            lv_obj_t *obj = lv_label_create(parent_obj);
+            objects.vel_txt = obj;
+            lv_obj_set_pos(obj, 613, 138);
+            lv_obj_set_size(obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+            lv_label_set_text(obj, "");
+        }
+        {
+            // temp_txt
+            lv_obj_t *obj = lv_label_create(parent_obj);
+            objects.temp_txt = obj;
+            lv_obj_set_pos(obj, 614, 183);
+            lv_obj_set_size(obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+            lv_label_set_text(obj, "");
+        }
     }
     
     tick_screen_principal();
 }
 
 void tick_screen_principal() {
+    {
+        const char *new_val = get_var_rpm_txt();
+        const char *cur_val = lv_label_get_text(objects.rpm_txt);
+        if (strcmp(new_val, cur_val) != 0) {
+            tick_value_change_obj = objects.rpm_txt;
+            lv_label_set_text(objects.rpm_txt, new_val);
+            tick_value_change_obj = NULL;
+        }
+    }
+    {
+        const char *new_val = get_var_vel_txt();
+        const char *cur_val = lv_label_get_text(objects.vel_txt);
+        if (strcmp(new_val, cur_val) != 0) {
+            tick_value_change_obj = objects.vel_txt;
+            lv_label_set_text(objects.vel_txt, new_val);
+            tick_value_change_obj = NULL;
+        }
+    }
+    {
+        const char *new_val = get_var_temp_txt();
+        const char *cur_val = lv_label_get_text(objects.temp_txt);
+        if (strcmp(new_val, cur_val) != 0) {
+            tick_value_change_obj = objects.temp_txt;
+            lv_label_set_text(objects.temp_txt, new_val);
+            tick_value_change_obj = NULL;
+        }
+    }
 }
 
 typedef void (*tick_screen_func_t)();
