@@ -11,6 +11,11 @@
  *    estiver definido, o que habilita retry/ACK de camada MAC.
  *  - Power save desligado: o módulo é alimentado pelo OBD2, latência importa
  *    mais que corrente aqui (a economia de verdade é o deep sleep, energia.c).
+ *  - Potência de TX limitada a 8,5 dBm: o ESP32-C3 SuperMini tem o casamento
+ *    da antena ruim; na potência padrão (20 dBm) o amplificador satura, o
+ *    sinal sai distorcido e o receptor não decodifica nada (sintoma medido na
+ *    bancada: Módulo B com 0 pacotes recebidos, nem inválidos). Com 8,5 dBm o
+ *    alcance ainda cobre o habitáculo com folga.
  *  - Comandos do Módulo B (canal de retorno): o callback de recepção roda na
  *    task do Wi-Fi, então ele só valida e deixa o pedido guardado sob
  *    spinlock. Quem age (gravar NVS, reiniciar) é a task de aquisição, fora
@@ -32,8 +37,12 @@ static const char *TAG = "enlace";
 /* TODO: substituir pelo MAC do Módulo B para enlace unicast com ACK */
 static uint8_t s_mac_destino[6] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
 
+/* Unidade da API: 0,25 dBm. 34 = 8,5 dBm (ver cabeçalho do arquivo). */
+#define POTENCIA_TX_QUARTOS_DBM  34
+
 static uint16_t s_seq = 0;
 static bool s_pronto = false;
+static uint32_t s_falhas_envio = 0;
 
 static uint16_t s_taxa_pedida_kbps = 0;
 static portMUX_TYPE s_trava_cmd = portMUX_INITIALIZER_UNLOCKED;
@@ -68,6 +77,7 @@ esp_err_t enlace_espnow_iniciar(void)
     ESP_ERROR_CHECK(esp_wifi_start());
     ESP_ERROR_CHECK(esp_wifi_set_channel(TELEM_CANAL_WIFI, WIFI_SECOND_CHAN_NONE));
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
+    ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(POTENCIA_TX_QUARTOS_DBM));
 
     ESP_ERROR_CHECK(esp_now_init());
     ESP_ERROR_CHECK(esp_now_register_recv_cb(ao_receber));
@@ -79,9 +89,17 @@ esp_err_t enlace_espnow_iniciar(void)
     par.encrypt = false;
     ESP_ERROR_CHECK(esp_now_add_peer(&par));
 
+    int8_t potencia = 0;
+    esp_wifi_get_max_tx_power(&potencia);
+    uint8_t mac[6];
+    esp_wifi_get_mac(WIFI_IF_STA, mac);
+
     s_pronto = true;
-    ESP_LOGI(TAG, "ESP-NOW pronto no canal %d (pacote de %u bytes)",
-             TELEM_CANAL_WIFI, (unsigned)sizeof(telem_pacote_t));
+    ESP_LOGI(TAG, "ESP-NOW pronto no canal %d (pacote de %u bytes, TX %d.%02d dBm, "
+                  "MAC %02X:%02X:%02X:%02X:%02X:%02X)",
+             TELEM_CANAL_WIFI, (unsigned)sizeof(telem_pacote_t),
+             potencia / 4, (potencia % 4) * 25,
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     return ESP_OK;
 }
 
@@ -98,9 +116,15 @@ esp_err_t enlace_espnow_enviar(telem_pacote_t *pacote)
 
     esp_err_t r = esp_now_send(s_mac_destino, (const uint8_t *)pacote, sizeof(*pacote));
     if (r != ESP_OK) {
+        s_falhas_envio++;
         ESP_LOGW(TAG, "esp_now_send: %s", esp_err_to_name(r));
     }
     return r;
+}
+
+uint32_t enlace_espnow_falhas_envio(void)
+{
+    return s_falhas_envio;
 }
 
 uint16_t enlace_espnow_consumir_taxa_pedida(void)

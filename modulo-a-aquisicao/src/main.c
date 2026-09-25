@@ -186,11 +186,12 @@ static void tarefa_envio(void *arg)
         int64_t agora_ms = esp_timer_get_time() / 1000;
         if (agora_ms - ultimo_log_ms >= PERIODO_LOG_RESUMO_MS) {
             ultimo_log_ms = agora_ms;
-            ESP_LOGI(TAG, "CAN %u kbit/s | rpm %u vel %u temp %d.%d | dados %s | seq %u",
+            ESP_LOGI(TAG, "CAN %u kbit/s | rpm %u vel %u temp %d.%d | dados %s | "
+                          "ESP-NOW seq %u falhas %lu",
                      can_obd2_taxa_atual(), p.rpm, p.velocidade,
                      p.temp_arref_d / 10, abs(p.temp_arref_d % 10),
                      (p.flags & TELEM_FLAG_DADOS_VALIDOS) ? "validos" : "INVALIDOS",
-                     p.seq);
+                     p.seq, (unsigned long)enlace_espnow_falhas_envio());
         }
 
         /* Pedido de troca de taxa vindo da tela do Módulo B */

@@ -19,3 +19,6 @@ esp_err_t enlace_espnow_enviar(telem_pacote_t *pacote);
 /* Taxa CAN (kbit/s) pedida pelo Módulo B e ainda não consumida, ou 0 se
  * não há pedido. Ler consome o pedido. */
 uint16_t enlace_espnow_consumir_taxa_pedida(void);
+
+/* Quantos esp_now_send() devolveram erro desde o boot (diagnóstico) */
+uint32_t enlace_espnow_falhas_envio(void);
