@@ -18,6 +18,11 @@ lv_style_t *get_style_redswitch_INDICATOR_CHECKED();
 void add_style_redswitch(lv_obj_t *obj);
 void remove_style_redswitch(lv_obj_t *obj);
 
+// Style: backbtn
+lv_style_t *get_style_backbtn_MAIN_DEFAULT();
+void add_style_backbtn(lv_obj_t *obj);
+void remove_style_backbtn(lv_obj_t *obj);
+
 #ifdef __cplusplus
 }
 #endif

@@ -37,7 +37,6 @@ typedef struct _objects_t {
     lv_obj_t *temp_txt_2;
     lv_obj_t *return_painel;
     lv_obj_t *obj0;
-    lv_obj_t *return_layout;
     lv_obj_t *obj1;
     lv_obj_t *dropdown_v1;
     lv_obj_t *obj2;
@@ -51,7 +50,7 @@ typedef struct _objects_t {
     lv_obj_t *obj6;
     lv_obj_t *dropdown_v6;
     lv_obj_t *obj7;
-    lv_obj_t *return_config;
+    lv_obj_t *return_layout;
     lv_obj_t *obj8;
     lv_obj_t *bps_can_config;
     lv_obj_t *obj9;
@@ -60,6 +59,7 @@ typedef struct _objects_t {
     lv_obj_t *obj12;
     lv_obj_t *retry_config;
     lv_obj_t *obj13;
+    lv_obj_t *return_config;
     lv_obj_t *max_temp_alarm_sw;
     lv_obj_t *slide_max_temp;
     lv_obj_t *cold_engine_alarm_sw;

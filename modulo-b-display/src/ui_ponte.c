@@ -471,6 +471,26 @@ static void preparar_tela_alarmes(void)
     atualizar_textos_alarmes();
 }
 
+/* Ícones do EEZ exportados em A8 (só alfa, sem cor): o LVGL 9 desenha A8 com
+ * a cor de "image recolor" do estilo, que por padrão é PRETA — no fundo
+ * preto das telas o ícone fica invisível, embora clicável. Aqui a cor é
+ * definida explicitamente, com um cinza no toque como resposta visual.
+ * A8 é o formato certo para ícones monocromáticos: 1 byte por pixel (4x
+ * menos que ARGB8888) e cor escolhida em tempo de execução. */
+#define COR_ICONE          lv_color_white()
+#define COR_ICONE_TOCADO   lv_color_hex(0x8A96A3)
+
+static void colorir_icone(lv_obj_t *obj)
+{
+    if (obj == NULL) {
+        return;
+    }
+    lv_obj_set_style_image_recolor(obj, COR_ICONE, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_image_recolor_opa(obj, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_image_recolor(obj, COR_ICONE_TOCADO, LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_image_recolor_opa(obj, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_PRESSED);
+}
+
 static void ligar_botao(lv_obj_t *botao, lv_event_cb_t cb, intptr_t dado)
 {
     if (botao != NULL) {
@@ -499,6 +519,12 @@ void ui_ponte_iniciar(void)
     ligar_botao(objects.return_config, ao_navegar, SCREEN_ID_PRINCIPAL);
     ligar_botao(objects.btn_alarms, ao_navegar, SCREEN_ID_PAINEL_ALARMS);
     ligar_botao(objects.return_alarms, ao_navegar, SCREEN_ID_PRINCIPAL);
+
+    /* Botões de voltar viraram ícones (imagebutton A8) no EEZ */
+    colorir_icone(objects.return_painel);
+    colorir_icone(objects.return_layout);
+    colorir_icone(objects.return_config);
+    colorir_icone(objects.return_alarms);
     /* Atalho: deslizar para a direita também volta ao menu */
     lv_obj_add_event_cb(objects.painel_alarms, ao_deslizar_volta, LV_EVENT_GESTURE, NULL);
 
