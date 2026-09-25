@@ -43,18 +43,30 @@ CONFIG_LV_COLOR_DEPTH_16=y
 # LVGL: 5 telas do EEZ estourariam o pool. Com SPIRAM_MALLOC_ALWAYSINTERNAL
 # acima, blocos pequenos ficam na SRAM e os grandes vão para a PSRAM.
 CONFIG_LV_USE_CLIB_MALLOC=y
-# Fontes Montserrat embutidas. O EEZ Studio só oferece as que existem aqui:
-# se usar um tamanho novo no EEZ, habilite a linha correspondente e apague o
-# sdkconfig.<env> gerado para ele ser refeito. App de 8 MB comporta todas.
+# Fontes Montserrat embutidas: TODOS os tamanhos pares de 8 a 48, porque o
+# EEZ Studio oferece todos na lista de fontes e o código gerado quebra o
+# build se usar um tamanho desabilitado aqui. Custa ~1 MB de flash (app tem 8).
+# Depois de mexer aqui, apague o sdkconfig.modulo_b para ele ser refeito.
+CONFIG_LV_FONT_MONTSERRAT_8=y
+CONFIG_LV_FONT_MONTSERRAT_10=y
 CONFIG_LV_FONT_MONTSERRAT_12=y
+CONFIG_LV_FONT_MONTSERRAT_14=y
 CONFIG_LV_FONT_MONTSERRAT_16=y
 CONFIG_LV_FONT_MONTSERRAT_18=y
 CONFIG_LV_FONT_MONTSERRAT_20=y
+CONFIG_LV_FONT_MONTSERRAT_22=y
 CONFIG_LV_FONT_MONTSERRAT_24=y
+CONFIG_LV_FONT_MONTSERRAT_26=y
 CONFIG_LV_FONT_MONTSERRAT_28=y
+CONFIG_LV_FONT_MONTSERRAT_30=y
 CONFIG_LV_FONT_MONTSERRAT_32=y
+CONFIG_LV_FONT_MONTSERRAT_34=y
 CONFIG_LV_FONT_MONTSERRAT_36=y
+CONFIG_LV_FONT_MONTSERRAT_38=y
 CONFIG_LV_FONT_MONTSERRAT_40=y
+CONFIG_LV_FONT_MONTSERRAT_42=y
+CONFIG_LV_FONT_MONTSERRAT_44=y
+CONFIG_LV_FONT_MONTSERRAT_46=y
 CONFIG_LV_FONT_MONTSERRAT_48=y
 
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y

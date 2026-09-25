@@ -9,6 +9,8 @@
  * a sincronização B -> A (para o cálculo de consumo de verdade, que roda no
  * Módulo A) é fase 2 — exige canal de retorno no ESP-NOW.
  */
+#include <string.h>
+
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "nvs.h"
@@ -25,6 +27,7 @@ static const char *TAG = "nvm_config";
 #define CHAVE_JANELA    "janela_media"
 #define CHAVE_TANQUE    "tanque_dl"
 #define CHAVE_VE        "ve_milesimos"
+#define CHAVE_LAYOUT    "layout"        /* blob de NVM_LAYOUT_CAMPOS bytes */
 
 /* Padrões de fábrica */
 #define PADRAO_LIMIAR_TEMP_D  1050   /* 105,0 °C — acima da faixa normal (~90-100) do 1.6 Sigma */
@@ -39,6 +42,9 @@ static nvm_config_t s_cfg = {
     .janela_media = PADRAO_JANELA_MEDIA,
     .tanque_dl = PADRAO_TANQUE_DL,
     .ve_milesimos = PADRAO_VE_MILESIMOS,
+    /* Padrão do painel: RPM, velocidade, temp. do motor | consumo, tanque,
+     * bateria. Índices da tabela de grandezas de ui_ponte.c. */
+    .layout = { 0, 1, 4, 2, 7, 9 },
 };
 
 void nvm_config_iniciar(void)
@@ -54,6 +60,11 @@ void nvm_config_iniciar(void)
     nvs_get_u8(h, CHAVE_JANELA, &s_cfg.janela_media);
     nvs_get_u16(h, CHAVE_TANQUE, &s_cfg.tanque_dl);
     nvs_get_u16(h, CHAVE_VE, &s_cfg.ve_milesimos);
+    size_t tam = sizeof(s_cfg.layout);
+    uint8_t layout[NVM_LAYOUT_CAMPOS];
+    if (nvs_get_blob(h, CHAVE_LAYOUT, layout, &tam) == ESP_OK && tam == sizeof(layout)) {
+        memcpy(s_cfg.layout, layout, sizeof(layout));
+    }
     nvs_close(h);
 
     ESP_LOGI(TAG, "config: limiar %d.%d C, hist %d.%d C, janela %u, tanque %u.%u L, VE %u/1000",
@@ -96,6 +107,24 @@ esp_err_t nvm_config_salvar(const nvm_config_t *nova)
     if (r == ESP_OK) {
         s_cfg = *nova;
         ESP_LOGI(TAG, "configuracao gravada");
+    }
+    return r;
+}
+
+esp_err_t nvm_config_salvar_layout(const uint8_t layout[NVM_LAYOUT_CAMPOS])
+{
+    nvs_handle_t h;
+    esp_err_t r = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &h);
+    if (r != ESP_OK) {
+        return r;
+    }
+    r = nvs_set_blob(h, CHAVE_LAYOUT, layout, NVM_LAYOUT_CAMPOS);
+    if (r == ESP_OK) {
+        r = nvs_commit(h);
+    }
+    nvs_close(h);
+    if (r == ESP_OK) {
+        memcpy(s_cfg.layout, layout, NVM_LAYOUT_CAMPOS);
     }
     return r;
 }

@@ -12,7 +12,10 @@ typedef struct {
     uint8_t  janela_media;    /* tamanho da média móvel, em amostras */
     uint16_t tanque_dl;       /* capacidade do tanque, décimos de litro */
     uint16_t ve_milesimos;    /* eficiência volumétrica × 1000 (espelho do Módulo A) */
+    uint8_t  layout[6];       /* grandeza exibida em cada campo do painel (ver ui_ponte.c) */
 } nvm_config_t;
+
+#define NVM_LAYOUT_CAMPOS       6      /* campos Value_1..Value_6 do painel principal */
 
 /* Limites de sanidade usados nos ajustes por toque */
 #define NVM_LIMIAR_TEMP_MIN_D   800    /* 80,0 °C */
@@ -30,3 +33,8 @@ const nvm_config_t *nvm_config(void);
 
 /* Valida, grava na NVS e atualiza o cache */
 esp_err_t nvm_config_salvar(const nvm_config_t *nova);
+
+/* Grava só o layout do painel (chamado a cada troca numa lista da tela
+ * Painel layout). A validade dos índices é responsabilidade de quem chama,
+ * que é quem conhece a lista de grandezas. */
+esp_err_t nvm_config_salvar_layout(const uint8_t layout[NVM_LAYOUT_CAMPOS]);

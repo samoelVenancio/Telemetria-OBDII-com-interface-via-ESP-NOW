@@ -32,3 +32,7 @@ bool estado_copiar(telem_pacote_t *pacote, estado_enlace_t *enlace);
 
 /* true se o último pacote válido chegou dentro do timeout do enlace */
 bool estado_enlace_ok(void);
+
+/* Zera recebidos/perdidos/inválidos (botão Retry da tela Config): recomeça a
+ * medição de entrega sem precisar reiniciar o módulo. */
+void estado_zerar_estatisticas(void);

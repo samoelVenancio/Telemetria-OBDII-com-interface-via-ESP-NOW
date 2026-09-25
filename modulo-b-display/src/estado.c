@@ -100,3 +100,12 @@ bool estado_enlace_ok(void)
     portEXIT_CRITICAL(&s_trava);
     return tem && (agora_ms() - ultimo) <= ESTADO_ENLACE_TIMEOUT_MS;
 }
+
+void estado_zerar_estatisticas(void)
+{
+    portENTER_CRITICAL(&s_trava);
+    s_enlace.recebidos = 0;
+    s_enlace.perdidos = 0;
+    s_enlace.invalidos = 0;
+    portEXIT_CRITICAL(&s_trava);
+}

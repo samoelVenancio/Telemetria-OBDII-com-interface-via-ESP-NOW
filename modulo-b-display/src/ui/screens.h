@@ -12,21 +12,66 @@ extern "C" {
 enum ScreensEnum {
     _SCREEN_ID_FIRST = 1,
     SCREEN_ID_PRINCIPAL = 1,
-    _SCREEN_ID_LAST = 1
+    SCREEN_ID_PAINEL_PRINCIPAL = 2,
+    SCREEN_ID_PAINEL_LAYOUT = 3,
+    SCREEN_ID_PAINEL_CONFIG = 4,
+    _SCREEN_ID_LAST = 4
 };
 
 typedef struct _objects_t {
     lv_obj_t *principal;
+    lv_obj_t *painel_principal;
+    lv_obj_t *painel_layout;
+    lv_obj_t *painel_config;
+    lv_obj_t *btn_settings;
+    lv_obj_t *btn_panel;
+    lv_obj_t *btn_layout;
+    lv_obj_t *rpm_txt_1;
+    lv_obj_t *vel_txt_1;
+    lv_obj_t *temp_txt_1;
+    lv_obj_t *rpm_txt_2;
+    lv_obj_t *vel_txt_2;
+    lv_obj_t *temp_txt_2;
+    lv_obj_t *return_painel;
     lv_obj_t *obj0;
-    lv_obj_t *rpm_txt;
-    lv_obj_t *vel_txt;
-    lv_obj_t *temp_txt;
+    lv_obj_t *return_layout;
+    lv_obj_t *obj1;
+    lv_obj_t *dropdown_v1;
+    lv_obj_t *obj2;
+    lv_obj_t *dropdown_v2;
+    lv_obj_t *obj3;
+    lv_obj_t *dropdown_v3;
+    lv_obj_t *obj4;
+    lv_obj_t *dropdown_v4;
+    lv_obj_t *obj5;
+    lv_obj_t *dropdown_v5;
+    lv_obj_t *obj6;
+    lv_obj_t *dropdown_v6;
+    lv_obj_t *obj7;
+    lv_obj_t *return_config;
+    lv_obj_t *obj8;
+    lv_obj_t *bps_can_config;
+    lv_obj_t *obj9;
+    lv_obj_t *obj10;
+    lv_obj_t *obj11;
+    lv_obj_t *obj12;
+    lv_obj_t *retry_config;
+    lv_obj_t *obj13;
 } objects_t;
 
 extern objects_t objects;
 
 void create_screen_principal();
 void tick_screen_principal();
+
+void create_screen_painel_principal();
+void tick_screen_painel_principal();
+
+void create_screen_painel_layout();
+void tick_screen_painel_layout();
+
+void create_screen_painel_config();
+void tick_screen_painel_config();
 
 void tick_screen_by_id(enum ScreensEnum screenId);
 void tick_screen(int screen_index);
