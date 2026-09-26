@@ -9,10 +9,12 @@ CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_160=y
 CONFIG_FREERTOS_HZ=1000
 
 # Watchdog de task: as tasks de aquisição e de envio se inscrevem e precisam
-# dar reset periodicamente — travou o ciclo, reinicia o módulo.
+# dar reset periodicamente. PANIC=y é o que faz ele REINICIAR o módulo; sem
+# isso o watchdog só escreve um aviso no serial e o firmware segue travado.
 CONFIG_ESP_TASK_WDT_EN=y
 CONFIG_ESP_TASK_WDT_INIT=y
 CONFIG_ESP_TASK_WDT_TIMEOUT_S=10
+CONFIG_ESP_TASK_WDT_PANIC=y
 
 # Tabela de partições própria do módulo
 CONFIG_PARTITION_TABLE_CUSTOM=y

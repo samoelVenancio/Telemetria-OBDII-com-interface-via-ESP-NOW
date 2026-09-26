@@ -118,8 +118,8 @@ static void tarefa_aquisicao(void *arg)
             esp_restart(); /* não retorna */
         }
 
-        /* Carro dormiu? (deep sleep lá dentro se sim — não retorna) */
-        energia_avaliar(can_obd2_ultima_atividade_ms());
+        /* ECM calado? (deep sleep lá dentro se sim — não retorna) */
+        energia_avaliar(can_obd2_ultima_atividade_ms(), can_obd2_ecm_respondeu());
 
         /* Cadência espaçada: NUNCA rajada. Mesmo com vários PIDs vencidos,
          * sai exatamente uma requisição por intervalo. */
@@ -238,6 +238,7 @@ static bool confirmar_barramento(void)
     }
     if (e.erros_barramento == 0) {
         ESP_LOGW(TAG, "barramento em silencio a %u kbit/s", kbps);
+        energia_rede_em_repouso();
         return false;
     }
 
@@ -295,7 +296,7 @@ void app_main(void)
     if (!confirmar_barramento()) {
         ESP_LOGW(TAG, "sem trafego CAN utilizavel — carro dormindo; "
                       "nada sera transmitido");
-        energia_dormir_agora(); /* não retorna; timer reacorda em 60 s */
+        energia_dormir_agora(); /* não retorna; timer reacorda (60 s ou 5 min) */
     }
 
     ESP_ERROR_CHECK(can_obd2_modo_normal());

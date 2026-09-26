@@ -62,5 +62,12 @@ esp_err_t can_obd2_requisitar_pid(uint8_t pid, uint8_t *resposta,
  * insumo da gestão de energia (energia.c). */
 int64_t can_obd2_ultima_atividade_ms(void);
 
+/* true se o ECM já respondeu algum PID desde o boot (carro ligado) */
+bool can_obd2_ecm_respondeu(void);
+
+/* Desinstala o driver e trava o pino TX em recessivo (nível alto) durante o
+ * deep sleep. Obrigatório antes de dormir — ver comentário no .c. */
+void can_obd2_preparar_sono(void);
+
 /* FASE 2 — STUB. Leitura de DTCs (Modo 03). Ver comentário no .c. */
 esp_err_t can_obd2_ler_dtcs(uint16_t *codigos, size_t maximo, size_t *quantidade);

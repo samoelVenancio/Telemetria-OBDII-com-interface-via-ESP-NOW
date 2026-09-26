@@ -33,6 +33,17 @@ CONFIG_ESP32S3_DATA_CACHE_LINE_64B=y
 # operações de flash — par com o bounce buffer em SRAM (display_init.c)
 CONFIG_LCD_RGB_ISR_IRAM_SAFE=y
 
+# --- Watchdog ---
+# Vigia as tasks idle dos dois núcleos: se a task do LVGL (core 1) ou a do
+# Wi-Fi (core 0) monopolizar a CPU por 5 s, o módulo REINICIA (PANIC=y; sem
+# isso o watchdog só avisaria no serial e a tela ficaria congelada).
+CONFIG_ESP_TASK_WDT_EN=y
+CONFIG_ESP_TASK_WDT_INIT=y
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=5
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0=y
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1=y
+CONFIG_ESP_TASK_WDT_PANIC=y
+
 # --- Tabela de partições própria (app de 8 MB) ---
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"

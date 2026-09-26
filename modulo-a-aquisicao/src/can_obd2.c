@@ -22,12 +22,23 @@
  * Levantamento real do veículo (varredura de PIDs):
  *  - 500 kbit/s, requisições para 0x7E0, ECM responde em 0x7E8.
  *  - J1962: CAN-H pino 6, CAN-L pino 14, GND 4/5, 12V permanente no 16.
+ *
+ * Pino TX no deep sleep (segurança do barramento do carro):
+ *  No deep sleep o GPIO do TX ficaria flutuando. Se o SN65HVD230 ler essa
+ *  entrada como nível baixo, ele força DOMINANTE no barramento sem parar —
+ *  e um dominante permanente trava a rede CAN inteira do carro (painel, ABS,
+ *  injeção) enquanto o módulo dorme. Por isso, antes de dormir, o pino é
+ *  travado em nível ALTO (= recessivo, "não falo nada") com hold de GPIO,
+ *  que mantém o nível durante o sono e através do próprio reset do despertar.
+ *  No boot seguinte o hold é liberado logo antes de o driver TWAI assumir.
  */
 #include <string.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/twai.h"
+#include "driver/gpio.h"
+#include "soc/soc_caps.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "nvs.h"
@@ -58,6 +69,7 @@ static int64_t s_ultima_atividade_ms = 0;
 static uint16_t s_kbps = CAN_KBPS_CARRO;
 static bool s_instalado = false;
 static uint32_t s_bus_off_seguidos = 0;
+static bool s_ecm_respondeu = false;
 
 static int64_t agora_ms(void)
 {
@@ -119,6 +131,10 @@ static void desinstalar(void)
 static esp_err_t instalar_driver(twai_mode_t modo, uint16_t kbps, bool filtrar_resposta_ecm)
 {
     desinstalar();
+
+    /* O pino pode estar travado em recessivo desde o último deep sleep
+     * (can_obd2_preparar_sono). Sem liberar, o TWAI não consegue transmitir. */
+    gpio_hold_dis((gpio_num_t)CAN_GPIO_TX);
 
     twai_general_config_t g = TWAI_GENERAL_CONFIG_DEFAULT(
         (gpio_num_t)CAN_GPIO_TX, (gpio_num_t)CAN_GPIO_RX, modo);
@@ -306,6 +322,7 @@ esp_err_t can_obd2_requisitar_pid(uint8_t pid, uint8_t *resposta,
         memcpy(resposta, &msg.data[3], n);
         *tamanho = n;
         s_bus_off_seguidos = 0; /* barramento saudável de novo */
+        s_ecm_respondeu = true;
         return ESP_OK;
     }
     return ESP_ERR_TIMEOUT;
@@ -314,6 +331,31 @@ esp_err_t can_obd2_requisitar_pid(uint8_t pid, uint8_t *resposta,
 int64_t can_obd2_ultima_atividade_ms(void)
 {
     return s_ultima_atividade_ms;
+}
+
+bool can_obd2_ecm_respondeu(void)
+{
+    return s_ecm_respondeu;
+}
+
+void can_obd2_preparar_sono(void)
+{
+    desinstalar();
+
+    /* TX em nível ALTO = recessivo: o transceptor não aciona o barramento */
+    gpio_config_t cfg = {
+        .pin_bit_mask = 1ULL << CAN_GPIO_TX,
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+    };
+    gpio_config(&cfg);
+    gpio_set_level((gpio_num_t)CAN_GPIO_TX, 1);
+    gpio_hold_en((gpio_num_t)CAN_GPIO_TX);
+#if !SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP
+    /* Chips sem hold individual no deep sleep precisam do hold global */
+    gpio_deep_sleep_hold_en();
+#endif
+    ESP_LOGI(TAG, "TX do CAN travado em recessivo para o deep sleep");
 }
 
 esp_err_t can_obd2_ler_dtcs(uint16_t *codigos, size_t maximo, size_t *quantidade)
