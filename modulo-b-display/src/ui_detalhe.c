@@ -33,8 +33,10 @@ static const char *TAG = "ui_detalhe";
 #define COR_SERIE           0x46A758   /* verde OK da paleta dos ícones */
 #define COR_GRADE           0x333333
 
-/* Nome e formato de cada grandeza. MESMA ORDEM do grandeza_t. Sem acentos:
- * as Montserrat embutidas não têm os glifos. */
+/* Nome e formato de cada grandeza. MESMA ORDEM do grandeza_t. Com acentos:
+ * ui_tema.c põe o título e os rótulos na Orbitron, que tem Latin-1. Os nomes
+ * seguem est_nome() (ui_estilo.c), mas o combustível mantém (L)/(%) para os
+ * dois detalhes não ficarem com o mesmo título. */
 typedef struct {
     const char *nome;
     const char *prefixo;
@@ -43,16 +45,16 @@ typedef struct {
 } descricao_t;
 
 static const descricao_t DESCRICAO[G_TOTAL] = {
-    [G_RPM]        = { "RPM",         "",  " rpm",  0 },
-    [G_VELOCIDADE] = { "Velocidade",  "",  " km/h", 0 },
-    [G_CONSUMO]    = { "Consumo",     "",  " km/L", 1 },
-    [G_ETANOL]     = { "Etanol",      "E", "",      0 },
-    [G_TEMP_MOTOR] = { "Temp. motor", "",  "°C",    1 },
-    [G_TEMP_AR]    = { "Temp. ar",    "",  "°C",    1 },
-    [G_MAP]        = { "MAP",         "",  " kPa",  0 },
-    [G_TANQUE_L]   = { "Tanque (L)",  "",  " L",    1 },
-    [G_TANQUE_PCT] = { "Tanque (%)",  "",  "%",     0 },
-    [G_BATERIA]    = { "Bateria",     "",  " V",    2 },
+    [G_RPM]        = { "ROTAÇÃO",              "",  " rpm",  0 },
+    [G_VELOCIDADE] = { "VELOCIDADE",           "",  " km/h", 0 },
+    [G_CONSUMO]    = { "CONSUMO INSTANTÂNEO",  "",  " km/L", 1 },
+    [G_ETANOL]     = { "ETANOL NA MISTURA",    "E", "",      0 },
+    [G_TEMP_MOTOR] = { "TEMPERATURA DO MOTOR", "",  "°C",    1 },
+    [G_TEMP_AR]    = { "TEMPERATURA DO AR",    "",  "°C",    1 },
+    [G_MAP]        = { "PRESSÃO NO COLETOR",   "",  " kPa",  0 },
+    [G_TANQUE_L]   = { "COMBUSTÍVEL (L)",      "",  " L",    1 },
+    [G_TANQUE_PCT] = { "COMBUSTÍVEL (%)",      "",  "%",     0 },
+    [G_BATERIA]    = { "BATERIA",              "",  " V",    2 },
 };
 
 typedef struct {
@@ -129,16 +131,16 @@ static void atualizar_textos(void)
 
     const estatistica_t *e = &s_estat[s_atual];
     if (e->n == 0) {
-        escrever(objects.min_detalhe, "Min --");
-        escrever(objects.med_detalhe, "Media --");
-        escrever(objects.max_detalhe, "Max --");
+        escrever(objects.min_detalhe, "Mín --");
+        escrever(objects.med_detalhe, "Média --");
+        escrever(objects.max_detalhe, "Máx --");
         return;
     }
-    formatar(txt, "Min ", s_atual, e->min);
+    formatar(txt, "Mín ", s_atual, e->min);
     escrever(objects.min_detalhe, txt);
-    formatar(txt, "Media ", s_atual, (int32_t)(e->soma / (int64_t)e->n));
+    formatar(txt, "Média ", s_atual, (int32_t)(e->soma / (int64_t)e->n));
     escrever(objects.med_detalhe, txt);
-    formatar(txt, "Max ", s_atual, e->max);
+    formatar(txt, "Máx ", s_atual, e->max);
     escrever(objects.max_detalhe, txt);
 }
 
