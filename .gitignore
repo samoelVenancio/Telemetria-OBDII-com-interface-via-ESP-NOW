@@ -16,3 +16,6 @@ __pycache__/
 
 # EEZ Studio — estado da janela do editor (por usuário)
 *.eez-project-ui-state
+
+# Backups locais (ex.: injetar_bitmaps_eez.py)
+*.bak
