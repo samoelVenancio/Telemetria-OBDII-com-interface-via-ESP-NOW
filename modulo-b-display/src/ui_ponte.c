@@ -45,6 +45,11 @@
 #include "ui_ponte.h"
 #include "ui_icones.h"
 #include "ui_detalhe.h"
+#include "ui_estilo.h"
+#include "ui_cockpit.h"
+#include "ui_painel.h"
+#include "ui_menu.h"
+#include "ui_tema.h"
 #include "grandeza.h"
 
 static const char *TAG = "ui_ponte";
@@ -104,10 +109,11 @@ static const char *TAG = "ui_ponte";
 _Static_assert(G_TOTAL == UI_ICONES_GRANDEZAS,
                "grandeza_t mudou: atualize ICONE_GRANDEZA em ui_icones.c");
 
-/* Sem acentos: as fontes Montserrat embutidas no LVGL não têm os glifos */
+/* Com acentos: ui_tema.c troca a fonte das listas pela Orbitron, que tem
+ * Latin-1. A ORDEM não pode mudar — o índice é o que fica gravado na NVS. */
 static const char OPCOES_GRANDEZAS[] =
-    "RPM\nVelocidade\nConsumo\nEtanol\nTemp. motor\nTemp. ar\nMAP\n"
-    "Tanque (L)\nTanque (%)\nBateria";
+    "ROTAÇÃO\nVELOCIDADE\nCONSUMO\nETANOL\nTEMP. MOTOR\nTEMP. AR\nPRESSÃO MAP\n"
+    "COMBUSTÍVEL (L)\nCOMBUSTÍVEL (%)\nBATERIA";
 
 static const char OPCOES_CAN[] = "250 kbit/s\n500 kbit/s";
 #define OPCAO_CAN_250K  0
@@ -146,6 +152,10 @@ static uint8_t s_layout[NVM_LAYOUT_CAMPOS];
 static lv_obj_t *s_lista_can = NULL;   /* bps_can_config no EEZ */
 static uint16_t s_kbps_pedida = 0;     /* 0 = nenhum pedido pendente */
 static int64_t s_pedido_ms = 0;
+
+/* Saídas de atualizar_painel() que as telas em código também mostram */
+static ui_status_t s_status = UI_STATUS_SEM_ENLACE;
+static bool s_alarme_temp = false;
 
 static int64_t agora_ms(void)
 {
@@ -242,6 +252,8 @@ static void atualizar_painel(const telem_pacote_t *p, bool tem, bool ok,
         status = UI_STATUS_OK;
     }
     ui_icones_status(status);
+    s_status = status;
+    s_alarme_temp = alarme_temp;
 
     /* Ícone de cada campo segue o layout; o da temperatura do motor fica
      * vermelho enquanto o alarme estiver ativo. ui_icones só redesenha se
@@ -322,6 +334,13 @@ static void medicao_enlace(const estado_enlace_t *e, bool ok)
 }
 #endif
 
+/* Entrega do enlace desde o último Retry; 100 % antes do primeiro pacote */
+static uint8_t entrega_pct(const estado_enlace_t *e)
+{
+    uint32_t total = e->recebidos + e->perdidos;
+    return total ? (uint8_t)(((uint64_t)e->recebidos * 100u) / total) : 100;
+}
+
 static void atualizar_config(const telem_pacote_t *p, const estado_enlace_t *e, bool ok)
 {
     uint16_t kbps_atual = (p->flags & TELEM_FLAG_CAN_250K) ? 250 : 500;
@@ -349,16 +368,48 @@ static void atualizar_config(const telem_pacote_t *p, const estado_enlace_t *e, 
     if (s_kbps_pedida != 0) {
         snprintf(s_status_espnow, PONTE_TXT_MAX, "trocando CAN p/ %uk...", s_kbps_pedida);
     } else if (ok) {
-        uint32_t total = e->recebidos + e->perdidos;
-        uint32_t entrega = total ? (uint32_t)(((uint64_t)e->recebidos * 100u) / total) : 100;
-        snprintf(s_status_espnow, PONTE_TXT_MAX, "OK %lu%% %d dBm",
-                 (unsigned long)entrega, (int)e->rssi_dbm);
+        snprintf(s_status_espnow, PONTE_TXT_MAX, "OK %u%% %d dBm",
+                 (unsigned)entrega_pct(e), (int)e->rssi_dbm);
     } else {
         strcpy(s_status_espnow, "sem sinal");
     }
 
     snprintf(s_rev_sys, PONTE_TXT_MAX, "B %s | A %s", FIRMWARE_VERSAO_B,
              !ok ? "--" : (p->flags & TELEM_FLAG_BANCADA) ? "bancada" : "carro");
+}
+
+/* Telas em código (cockpit, painel, menu, tema): recebem um ui_dados_t
+ * montado com o mesmo pacote e as mesmas decisões das telas do EEZ, e cada
+ * uma só redesenha se for a tela ativa. */
+static void atualizar_telas_codigo(const telem_pacote_t *p, const estado_enlace_t *e, bool ok)
+{
+    ui_dados_t d = {
+        .enlace_ok     = ok,
+        .dados         = ok && (p->flags & TELEM_FLAG_DADOS_VALIDOS),
+        .rpm           = p->rpm,
+        .velocidade    = p->velocidade,
+        .temp_d        = p->temp_arref_d,
+        .iat_d         = p->iat_d,
+        .map_kpa       = p->map_kpa,
+        .tensao_c      = p->tensao_c,
+        .consumo_kml_c = p->consumo_kml_c,
+        .consumo_lh_c  = p->consumo_lh_c,
+        .etanol_pct    = p->etanol_pct,
+        .nivel_pct     = p->nivel_pct,
+        .litros_d      = p->litros_d,
+        .limiar_temp_d = nvm_config()->limiar_temp_d,
+        .alarme_temp   = s_alarme_temp,
+        .status        = s_status,
+        .msg_status    = s_msg_status,
+        .rssi_dbm      = e->rssi_dbm,
+        .entrega_pct   = entrega_pct(e),
+    };
+    memcpy(d.layout, s_layout, sizeof(d.layout));
+
+    ui_menu_atualizar(&d);
+    ui_cockpit_atualizar(&d);
+    ui_painel_atualizar(&d);
+    ui_tema_atualizar(&d);
 }
 
 static void ao_disparar_timer(lv_timer_t *timer)
@@ -377,6 +428,7 @@ static void ao_disparar_timer(lv_timer_t *timer)
 
     atualizar_painel(&p, tem, ok, alarme);
     atualizar_config(&p, &enlace, ok);
+    atualizar_telas_codigo(&p, &enlace, ok);
     ui_icones_sinal(ok, enlace.rssi_dbm);
     ui_detalhe_amostrar(&p, amostra_valida);
 #if MEDICAO_ENLACE
@@ -411,6 +463,27 @@ static void ao_navegar(lv_event_t *e)
 {
     enum ScreensEnum destino = (enum ScreensEnum)(intptr_t)lv_event_get_user_data(e);
     loadScreen(destino);
+}
+
+/* Navegação das telas em código (est_ir): as novas abrem por conta própria,
+ * as que ainda vêm do EEZ entram pelo loadScreen dele */
+static void ir(ui_destino_t destino)
+{
+    switch (destino) {
+    case UI_DEST_MENU:    ui_menu_abrir(); break;
+    case UI_DEST_COCKPIT: ui_cockpit_abrir(); break;
+    case UI_DEST_PAINEL:  ui_painel_abrir(); break;
+    case UI_DEST_LAYOUT:  loadScreen(SCREEN_ID_PAINEL_LAYOUT); break;
+    case UI_DEST_ALARMES: loadScreen(SCREEN_ID_PAINEL_ALARMS); break;
+    case UI_DEST_CONFIG:  loadScreen(SCREEN_ID_PAINEL_CONFIG); break;
+    }
+}
+
+/* Toque num cartão do painel novo: o painel já resolve a grandeza do campo */
+static void ao_tocar_cartao(int campo, int grandeza)
+{
+    (void)campo;
+    ui_detalhe_abrir(grandeza);
 }
 
 /* Toque num campo do Painel principal: abre o detalhe da grandeza que está
@@ -709,5 +782,18 @@ void ui_ponte_iniciar(void)
     snprintf(s_rev_sys, PONTE_TXT_MAX, "B %s | A --", FIRMWARE_VERSAO_B);
 
     lv_timer_create(ao_disparar_timer, PONTE_PERIODO_MS, NULL);
+
+    /* Visual novo: telas em código por cima do que o EEZ criou. O tema vem
+     * por último porque reposiciona objetos que a ponte acabou de ligar. As
+     * telas antigas (principal, painel_principal) seguem criadas, mas nada
+     * navega mais para elas. */
+    est_definir_navegacao(ir);
+    ui_painel_ao_tocar_campo(ao_tocar_cartao);
+    ui_menu_iniciar();
+    ui_cockpit_iniciar();
+    ui_painel_iniciar();
+    ui_tema_aplicar();
+    ui_cockpit_abrir();   /* boot direto no cockpit */
+
     ESP_LOGI(TAG, "ponte EEZ ativa, atualizacao a %d ms", PONTE_PERIODO_MS);
 }
