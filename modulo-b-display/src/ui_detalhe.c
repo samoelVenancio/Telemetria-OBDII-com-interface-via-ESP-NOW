@@ -22,6 +22,7 @@
 #include "ui/ui.h"
 #include "ui/screens.h"
 #include "ui_icones.h"
+#include "ui_estilo.h"   /* fonte e cor da unidade */
 #include "ui_detalhe.h"
 
 static const char *TAG = "ui_detalhe";
@@ -72,6 +73,11 @@ static uint8_t s_ticks;
 static int s_atual = G_RPM;
 static lv_obj_t *s_grafico;
 static lv_chart_series_t *s_serie;
+/* A Orbitron grande do valor (ui_font_orb_56) só tem dígitos e maiúsculas:
+ * "km/h", "rpm", "kPa" sairiam como caixas vazias. A unidade vai num label
+ * próprio, na fonte de 22 px (alfabeto completo), colado à direita do valor
+ * — como no cockpit e no painel. */
+static lv_obj_t *s_unidade;
 static int32_t s_y[HIST_PONTOS];              /* anel desenrolado, para o gráfico */
 
 static telem_pacote_t s_ultimo;
@@ -95,26 +101,41 @@ static bool valor_de(int g, const telem_pacote_t *p, int32_t *v)
     }
 }
 
-/* "<rótulo><prefixo>12.3<unidade>" a partir do valor escalado */
-static void formatar(char *dest, const char *rotulo, int g, int32_t v)
+/* "<rótulo><prefixo>12.3<unidade>" a partir do valor escalado; sem a
+ * unidade quando ela vai no label separado (valor grande) */
+static void formatar(char *dest, const char *rotulo, int g, int32_t v, bool com_unidade)
 {
     const descricao_t *d = &DESCRICAO[g];
+    const char *unidade = com_unidade ? d->unidade : "";
     if (d->casas == 0) {
-        snprintf(dest, TXT_MAX, "%s%s%ld%s", rotulo, d->prefixo, (long)v, d->unidade);
+        snprintf(dest, TXT_MAX, "%s%s%ld%s", rotulo, d->prefixo, (long)v, unidade);
         return;
     }
     int32_t divisor = (d->casas == 2) ? 100 : 10;
     int32_t abs_v = labs(v);
     snprintf(dest, TXT_MAX, (d->casas == 2) ? "%s%s%s%ld.%02ld%s" : "%s%s%s%ld.%ld%s",
              rotulo, d->prefixo, (v < 0) ? "-" : "", (long)(abs_v / divisor),
-             (long)(abs_v % divisor), d->unidade);
+             (long)(abs_v % divisor), unidade);
 }
 
 /* lv_label_set_text sempre invalida a área; só chama se o texto mudou */
-static void escrever(lv_obj_t *label, const char *texto)
+static bool escrever(lv_obj_t *label, const char *texto)
 {
     if (label != NULL && strcmp(lv_label_get_text(label), texto) != 0) {
         lv_label_set_text(label, texto);
+        return true;
+    }
+    return false;
+}
+
+/* Valor grande + unidade ao lado, alinhados pela base do texto */
+static void escrever_valor(const char *valor, const char *unidade)
+{
+    bool mudou = escrever(objects.valor_detalhe, valor);
+    mudou |= escrever(s_unidade, unidade);
+    if (mudou && s_unidade != NULL && objects.valor_detalhe != NULL) {
+        lv_obj_update_layout(objects.valor_detalhe);   /* largura do texto novo */
+        lv_obj_align_to(s_unidade, objects.valor_detalhe, LV_ALIGN_OUT_RIGHT_BOTTOM, 10, -10);
     }
 }
 
@@ -123,11 +144,12 @@ static void atualizar_textos(void)
     char txt[TXT_MAX];
     int32_t v;
     if (s_ultimo_valido && valor_de(s_atual, &s_ultimo, &v)) {
-        formatar(txt, "", s_atual, v);
+        formatar(txt, "", s_atual, v, false);
+        const char *u = DESCRICAO[s_atual].unidade;
+        escrever_valor(txt, (*u == ' ') ? u + 1 : u);
     } else {
-        strcpy(txt, "--");
+        escrever_valor("--", "");
     }
-    escrever(objects.valor_detalhe, txt);
 
     const estatistica_t *e = &s_estat[s_atual];
     if (e->n == 0) {
@@ -136,11 +158,11 @@ static void atualizar_textos(void)
         escrever(objects.max_detalhe, "Máx --");
         return;
     }
-    formatar(txt, "Mín ", s_atual, e->min);
+    formatar(txt, "Mín ", s_atual, e->min, true);
     escrever(objects.min_detalhe, txt);
-    formatar(txt, "Média ", s_atual, (int32_t)(e->soma / (int64_t)e->n));
+    formatar(txt, "Média ", s_atual, (int32_t)(e->soma / (int64_t)e->n), true);
     escrever(objects.med_detalhe, txt);
-    formatar(txt, "Máx ", s_atual, e->max);
+    formatar(txt, "Máx ", s_atual, e->max, true);
     escrever(objects.max_detalhe, txt);
 }
 
@@ -247,6 +269,13 @@ static void ao_zerar(lv_event_t *e)
 
 void ui_detalhe_iniciar(void)
 {
+    if (objects.painel_detalhe != NULL) {
+        s_unidade = lv_label_create(objects.painel_detalhe);
+        lv_label_set_text_static(s_unidade, "");
+        lv_obj_set_style_text_font(s_unidade, &ui_font_orb_22, LV_PART_MAIN);
+        lv_obj_set_style_text_color(s_unidade, lv_color_hex(EST_ROTULO), LV_PART_MAIN);
+    }
+
     for (int g = 0; g < G_TOTAL; g++) {
         for (int i = 0; i < HIST_PONTOS; i++) {
             s_hist[g][i] = LV_CHART_POINT_NONE;
