@@ -29,8 +29,11 @@
 #define TELEM_MAGIC   0x414C4554u
 /* "TCMD" em little-endian — identifica o pacote de comando (B -> A) */
 #define TELEM_MAGIC_CMD 0x444D4354u
-/* v2: flags b3/b4 e pacote de comando B -> A */
-#define TELEM_VERSAO  2
+/* "TPID" em little-endian — identifica o pacote de PIDs suportados (A -> B) */
+#define TELEM_MAGIC_SUP 0x44495054u
+/* v2: flags b3/b4 e pacote de comando B -> A
+ * v3: pacote de PIDs suportados A -> B (telemetria inalterada) */
+#define TELEM_VERSAO  3
 
 /* Canal Wi-Fi fixo do enlace ESP-NOW. Os dois módulos precisam concordar,
  * já que nenhum deles se associa a um AP (sem DHCP, sem varredura). */
@@ -115,6 +118,7 @@ static inline bool telem_pacote_valido(const telem_pacote_t *p)
  * ------------------------------------------------------------------------- */
 typedef enum {
     TELEM_CMD_DEFINIR_CAN_KBPS = 1,  /* valor = taxa do CAN em kbit/s (250 ou 500) */
+    TELEM_CMD_VARRER_PIDS      = 2,  /* refazer a varredura de PIDs suportados (valor = 0) */
 } telem_comando_id_t;
 
 typedef struct __attribute__((packed)) {
@@ -140,4 +144,57 @@ static inline bool telem_comando_valido(const telem_comando_t *c)
     return c->magic == TELEM_MAGIC_CMD &&
            c->versao == TELEM_VERSAO &&
            telem_crc16_comando(c) == c->crc16;
+}
+
+/* ---------------------------------------------------------------------------
+ * PIDs suportados pelo ECM (A -> B): resultado da varredura J1979 que o
+ * Módulo A faz quando a tela pede (TELEM_CMD_VARRER_PIDS): PIDs 0x00, 0x20,
+ * 0x40 e 0x60 do Modo 01, cada um um bitmap de 32 PIDs, e o 0x13 com as sondas
+ * O2 presentes. Reenviado a cada 2 s (mesmo sem varredura feita), para o B
+ * que ligar depois também receber. Tamanho diferente dos outros dois pacotes:
+ * o B distingue pelo tamanho.
+ * ------------------------------------------------------------------------- */
+typedef enum {
+    TELEM_VARREDURA_NAO_FEITA    = 0,  /* nenhuma pedida desde o boot do A */
+    TELEM_VARREDURA_COMPLETA     = 1,  /* bitmaps lidos até o fim da cadeia */
+    TELEM_VARREDURA_SEM_ECM      = 2,  /* ECM não respondeu (ignição desligada?) */
+    TELEM_VARREDURA_DEMO         = 3,  /* firmware demo: mapa dos PIDs simulados */
+    TELEM_VARREDURA_EM_ANDAMENTO = 4,  /* pedido recebido, varrendo agora */
+} telem_varredura_t;
+
+typedef struct __attribute__((packed)) {
+    uint32_t magic;          /* TELEM_MAGIC_SUP */
+    uint8_t  versao;         /* TELEM_VERSAO */
+    uint8_t  estado;         /* telem_varredura_t */
+    uint8_t  numero;         /* varreduras feitas desde o boot do A (a tela vê que é nova) */
+    uint32_t mapa[4];        /* resposta dos PIDs 0x00/0x20/0x40/0x60 (A..D, bit 31 = base+1) */
+    uint8_t  sondas;         /* resposta do PID 0x13 (b0..b3 banco 1 sensores 1..4,
+                              * b4..b7 banco 2); 0 se não suportado */
+    uint16_t crc16;          /* CRC-16/CCITT-FALSE dos bytes anteriores */
+} telem_suporte_t;
+
+#define TELEM_TAMANHO_SUPORTE  26u
+_Static_assert(sizeof(telem_suporte_t) == TELEM_TAMANHO_SUPORTE,
+               "telem_suporte_t mudou de tamanho — incremente TELEM_VERSAO e revise os dois modulos");
+
+static inline uint16_t telem_crc16_suporte(const telem_suporte_t *s)
+{
+    return telem_crc16((const uint8_t *)s, sizeof(*s) - sizeof(s->crc16));
+}
+
+static inline bool telem_suporte_valido(const telem_suporte_t *s)
+{
+    return s->magic == TELEM_MAGIC_SUP &&
+           s->versao == TELEM_VERSAO &&
+           telem_crc16_suporte(s) == s->crc16;
+}
+
+/* PID do Modo 01 (0x01..0x80) marcado como suportado no mapa J1979 */
+static inline bool telem_pid_suportado(const telem_suporte_t *s, uint8_t pid)
+{
+    if (pid == 0 || pid > 0x80) {
+        return false;
+    }
+    uint8_t i = (uint8_t)(pid - 1u);
+    return (s->mapa[i / 32u] >> (31u - (i % 32u))) & 1u;
 }
