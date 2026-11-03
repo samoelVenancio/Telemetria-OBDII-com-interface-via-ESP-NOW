@@ -11,6 +11,7 @@ idf_component_register(
         "enlace_espnow.c"
         "energia.c"
         "demo.c"
+        "varredura.c"
     INCLUDE_DIRS
         "."
         "../../comum"

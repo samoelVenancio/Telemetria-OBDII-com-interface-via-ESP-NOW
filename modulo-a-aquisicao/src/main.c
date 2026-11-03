@@ -38,6 +38,7 @@
 #include "consumo.h"
 #include "enlace_espnow.h"
 #include "energia.h"
+#include "varredura.h"
 
 static const char *TAG = "principal";
 
@@ -65,6 +66,7 @@ static const char *TAG = "principal";
 #define JANELA_SONDA_BANCADA_MS   500u   /* simulador manda fundo a cada 50 ms: ~10 quadros */
 #define LIMITE_BUS_OFF_SEGUIDOS   3u     /* passou disso: reinicia e refaz a detecção do barramento */
 #define PERIODO_LOG_RESUMO_MS     5000u  /* resumo no monitor serial */
+#define PERIODO_ENVIO_SUPORTE_MS  2000u  /* reenvio dos PIDs suportados (B que ligar depois) */
 
 /* Capacidade do tanque para converter nível % em litros.
  * TODO: confirmar no manual do New Fiesta hatch (valor de placa: 48 L). */
@@ -75,16 +77,39 @@ static const char *TAG = "principal";
  * pequenas, mais curtas que um context switch. */
 static dados_veiculo_t s_dados;
 static consumo_saida_t s_consumo;
+static telem_suporte_t s_suporte;   /* NAO_FEITA (0) até a tela pedir uma varredura */
+
+static void publicar_suporte(const telem_suporte_t *v)
+{
+    portENTER_CRITICAL(&s_trava_dados);
+    s_suporte = *v;
+    portEXIT_CRITICAL(&s_trava_dados);
+}
 static portMUX_TYPE s_trava_dados = portMUX_INITIALIZER_UNLOCKED;
 
 static void tarefa_aquisicao(void *arg)
 {
     (void)arg;
     ESP_ERROR_CHECK(esp_task_wdt_add(NULL));
+    uint8_t varreduras = 0;
 
     for (;;) {
         esp_task_wdt_reset();
         int64_t agora = esp_timer_get_time() / 1000;
+
+        /* Varredura dos PIDs suportados, só quando a tela pede (botão VARRER
+         * AGORA). Roda AQUI, e não numa task própria, para nunca haver duas
+         * requisições no barramento ao mesmo tempo — e só existe depois que
+         * o barramento foi confirmado e o driver está em modo normal. */
+        if (enlace_espnow_consumir_pedido_varredura()) {
+            telem_suporte_t v = { .estado = TELEM_VARREDURA_EM_ANDAMENTO, .numero = varreduras };
+            publicar_suporte(&v);
+            varredura_executar(&v, INTERVALO_ENTRE_REQ_MS, TIMEOUT_RESPOSTA_PID_MS);
+            v.numero = ++varreduras;
+            publicar_suporte(&v);
+            vTaskDelay(pdMS_TO_TICKS(INTERVALO_ENTRE_REQ_MS));
+            continue;
+        }
 
         int indice = pids_proximo_devido(agora);
         if (indice >= 0) {
@@ -144,8 +169,19 @@ static void tarefa_demo(void *arg)
 {
     (void)arg;
     ESP_ERROR_CHECK(esp_task_wdt_add(NULL));
+    uint8_t varreduras = 0;
+
     for (;;) {
         esp_task_wdt_reset();
+
+        /* Botão VARRER AGORA no demo: devolve o mapa dos PIDs simulados */
+        if (enlace_espnow_consumir_pedido_varredura()) {
+            telem_suporte_t v = { 0 };
+            varredura_demo(&v);
+            v.numero = ++varreduras;
+            publicar_suporte(&v);
+        }
+
         dados_veiculo_t novo;
         demo_gerar(esp_timer_get_time() / 1000, &novo);
         consumo_saida_t c = consumo_calcular(&novo);
@@ -213,6 +249,19 @@ static void tarefa_envio(void *arg)
         p.uptime_ms = (uint32_t)(esp_timer_get_time() / 1000);
 
         enlace_espnow_enviar(&p); /* completa magic/versão/seq/CRC e transmite */
+
+        /* PIDs suportados: 25 bytes a cada 2 s, para o B que ligar depois do A
+         * (ou perder um pacote) também mostrar a varredura */
+        static int64_t ultimo_suporte_ms = 0;
+        int64_t agora_sup_ms = esp_timer_get_time() / 1000;
+        if (agora_sup_ms - ultimo_suporte_ms >= PERIODO_ENVIO_SUPORTE_MS) {
+            ultimo_suporte_ms = agora_sup_ms;
+            telem_suporte_t s;
+            portENTER_CRITICAL(&s_trava_dados);
+            s = s_suporte;
+            portEXIT_CRITICAL(&s_trava_dados);
+            enlace_espnow_enviar_suporte(&s);
+        }
 
         /* Resumo periódico no serial: prova de vida do ciclo inteiro */
         static int64_t ultimo_log_ms = 0;

@@ -16,9 +16,16 @@ esp_err_t enlace_espnow_iniciar(void);
  * O chamador preenche apenas os campos de dados. */
 esp_err_t enlace_espnow_enviar(telem_pacote_t *pacote);
 
+/* Mesmo esquema para o pacote de PIDs suportados (magic, versão e CRC) */
+esp_err_t enlace_espnow_enviar_suporte(telem_suporte_t *suporte);
+
 /* Taxa CAN (kbit/s) pedida pelo Módulo B e ainda não consumida, ou 0 se
  * não há pedido. Ler consome o pedido. */
 uint16_t enlace_espnow_consumir_taxa_pedida(void);
+
+/* true se a tela pediu uma varredura de PIDs ainda não atendida. Ler consome
+ * o pedido (vários toques seguidos viram uma varredura só). */
+bool enlace_espnow_consumir_pedido_varredura(void);
 
 /* Quantos esp_now_send() devolveram erro desde o boot (diagnóstico) */
 uint32_t enlace_espnow_falhas_envio(void);

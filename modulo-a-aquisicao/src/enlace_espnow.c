@@ -45,6 +45,7 @@ static bool s_pronto = false;
 static uint32_t s_falhas_envio = 0;
 
 static uint16_t s_taxa_pedida_kbps = 0;
+static bool s_varredura_pedida = false;
 static portMUX_TYPE s_trava_cmd = portMUX_INITIALIZER_UNLOCKED;
 
 static void ao_receber(const esp_now_recv_info_t *info, const uint8_t *dados, int tamanho)
@@ -62,7 +63,20 @@ static void ao_receber(const esp_now_recv_info_t *info, const uint8_t *dados, in
         portENTER_CRITICAL(&s_trava_cmd);
         s_taxa_pedida_kbps = c.valor;
         portEXIT_CRITICAL(&s_trava_cmd);
+    } else if (c.comando == TELEM_CMD_VARRER_PIDS) {
+        portENTER_CRITICAL(&s_trava_cmd);
+        s_varredura_pedida = true;
+        portEXIT_CRITICAL(&s_trava_cmd);
     }
+}
+
+bool enlace_espnow_consumir_pedido_varredura(void)
+{
+    portENTER_CRITICAL(&s_trava_cmd);
+    bool pedida = s_varredura_pedida;
+    s_varredura_pedida = false;
+    portEXIT_CRITICAL(&s_trava_cmd);
+    return pedida;
 }
 
 esp_err_t enlace_espnow_iniciar(void)
@@ -118,6 +132,23 @@ esp_err_t enlace_espnow_enviar(telem_pacote_t *pacote)
     if (r != ESP_OK) {
         s_falhas_envio++;
         ESP_LOGW(TAG, "esp_now_send: %s", esp_err_to_name(r));
+    }
+    return r;
+}
+
+esp_err_t enlace_espnow_enviar_suporte(telem_suporte_t *suporte)
+{
+    if (!s_pronto) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    suporte->magic = TELEM_MAGIC_SUP;
+    suporte->versao = TELEM_VERSAO;
+    suporte->crc16 = telem_crc16_suporte(suporte);
+
+    esp_err_t r = esp_now_send(s_mac_destino, (const uint8_t *)suporte, sizeof(*suporte));
+    if (r != ESP_OK) {
+        s_falhas_envio++;
+        ESP_LOGW(TAG, "esp_now_send (PIDs suportados): %s", esp_err_to_name(r));
     }
     return r;
 }
