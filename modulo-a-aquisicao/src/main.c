@@ -78,6 +78,7 @@ static const char *TAG = "principal";
 static dados_veiculo_t s_dados;
 static consumo_saida_t s_consumo;
 static telem_suporte_t s_suporte;   /* NAO_FEITA (0) até a tela pedir uma varredura */
+static portMUX_TYPE s_trava_dados = portMUX_INITIALIZER_UNLOCKED;
 
 static void publicar_suporte(const telem_suporte_t *v)
 {
@@ -85,7 +86,6 @@ static void publicar_suporte(const telem_suporte_t *v)
     s_suporte = *v;
     portEXIT_CRITICAL(&s_trava_dados);
 }
-static portMUX_TYPE s_trava_dados = portMUX_INITIALIZER_UNLOCKED;
 
 static void tarefa_aquisicao(void *arg)
 {
