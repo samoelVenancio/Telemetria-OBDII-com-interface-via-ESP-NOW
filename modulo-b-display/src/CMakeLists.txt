@@ -19,6 +19,8 @@ idf_component_register(
         "nvm_config.c"
         "alarme.c"
         "ui_ponte.c"
+        "ui_icones.c"
+        "ui_detalhe.c"
         ${UI_EEZ_SRCS}
     INCLUDE_DIRS
         "."

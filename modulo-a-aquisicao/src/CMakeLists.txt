@@ -10,6 +10,7 @@ idf_component_register(
         "consumo.c"
         "enlace_espnow.c"
         "energia.c"
+        "demo.c"
     INCLUDE_DIRS
         "."
         "../../comum"

@@ -78,3 +78,9 @@
  * então a escala para 800x480 é feita no firmware (display_init.c). */
 #define PLACA_TOUCH_BRUTO_X_MAX    480
 #define PLACA_TOUCH_BRUTO_Y_MAX    272
+
+/* ---------- Marcador de medição (só com MEDICAO_LATENCIA=1) ---------- */
+/* GPIO 17 sai no conector de expansão da placa e não é usado por painel,
+ * touch (19/20), backlight (2) nem é strapping do S3 (0, 3, 45, 46).
+ * Configurado como saída apenas quando a medição está ligada (ui_ponte.c). */
+#define PLACA_GPIO_MEDICAO         17

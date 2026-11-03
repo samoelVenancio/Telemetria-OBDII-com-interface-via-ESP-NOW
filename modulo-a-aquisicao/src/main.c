@@ -47,6 +47,15 @@ static const char *TAG = "principal";
 #define CAN_BANCADA_ACEITA_SEM_ACK 0
 #endif
 
+/* Env modulo_a_demo: dados simulados, CAN desligado (ver demo.h) */
+#ifndef MODO_DEMO
+#define MODO_DEMO 0
+#endif
+#if MODO_DEMO
+#include "demo.h"
+#define PERIODO_DEMO_MS           100u   /* atualiza o estado simulado a 10 Hz */
+#endif
+
 /* Cadências e limites — todos com unidade no nome */
 #define INTERVALO_ENTRE_REQ_MS    100u   /* espaçamento mínimo entre requisições OBD2 (configurável) */
 #define TIMEOUT_RESPOSTA_PID_MS   200u   /* ECM calado além disso -> PID inválido, ciclo segue */
@@ -126,6 +135,30 @@ static void tarefa_aquisicao(void *arg)
         vTaskDelay(pdMS_TO_TICKS(INTERVALO_ENTRE_REQ_MS));
     }
 }
+
+#if MODO_DEMO
+/* Substitui a tarefa_aquisicao: em vez de perguntar ao ECM, gera o estado e
+ * passa pelo MESMO cálculo de consumo, então o consumo mostrado no Módulo B
+ * também é o do firmware real. */
+static void tarefa_demo(void *arg)
+{
+    (void)arg;
+    ESP_ERROR_CHECK(esp_task_wdt_add(NULL));
+    for (;;) {
+        esp_task_wdt_reset();
+        dados_veiculo_t novo;
+        demo_gerar(esp_timer_get_time() / 1000, &novo);
+        consumo_saida_t c = consumo_calcular(&novo);
+
+        portENTER_CRITICAL(&s_trava_dados);
+        s_dados = novo;
+        s_consumo = c;
+        portEXIT_CRITICAL(&s_trava_dados);
+
+        vTaskDelay(pdMS_TO_TICKS(PERIODO_DEMO_MS));
+    }
+}
+#endif
 
 static void tarefa_envio(void *arg)
 {
@@ -290,6 +323,18 @@ void app_main(void)
     energia_iniciar();
     consumo_iniciar();
     pids_iniciar();
+
+#if MODO_DEMO
+    /* Nada de CAN: o driver TWAI nunca é instalado e o pino TX fica travado
+     * em recessivo (mesma rotina do deep sleep), então o transceptor não
+     * aciona o barramento mesmo se estiver ligado em algum. */
+    ESP_LOGW(TAG, "firmware DEMO: dados SIMULADOS, CAN desligado");
+    can_obd2_preparar_sono();
+    ESP_ERROR_CHECK(enlace_espnow_iniciar());
+    xTaskCreate(tarefa_demo,  "demo",  4096, NULL, 5, NULL);
+    xTaskCreate(tarefa_envio, "envio", 4096, NULL, 4, NULL);
+    return;
+#endif
 
     ESP_LOGI(TAG, "firmware de %s", CAN_BANCADA_ACEITA_SEM_ACK ? "BANCADA" : "CARRO");
 

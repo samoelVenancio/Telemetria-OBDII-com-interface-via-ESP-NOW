@@ -43,6 +43,9 @@
 #include "ui/screens.h"
 #include "ui/vars.h"
 #include "ui_ponte.h"
+#include "ui_icones.h"
+#include "ui_detalhe.h"
+#include "grandeza.h"
 
 static const char *TAG = "ui_ponte";
 
@@ -65,23 +68,41 @@ static const char *TAG = "ui_ponte";
 #define MOTOR_FRIO_RPM_MAX        3000
 
 /* ---------------------------------------------------------------------------
- * Grandezas que podem ocupar um campo do painel. A ORDEM é a das opções nas
- * listas da tela Painel layout e é o que fica gravado na NVS — acrescentar
- * no fim é seguro; reordenar embaralha o layout salvo de quem já usa.
+ * Instrumentação para as medições do artigo. Desligada por padrão; ligar pelo
+ * build_flags do platformio.ini.
+ *
+ * MEDICAO_LATENCIA: inverte MEDICAO_GPIO_MARCADOR quando o texto de um campo
+ *   que mostra RPM muda — canal 2 do osciloscópio (o canal 1 é o GPIO 10 do
+ *   Módulo A). Marca a troca do texto no LVGL; o pixel aparece no próximo
+ *   quadro do painel.
+ * MEDICAO_ENLACE: uma linha "MEDICAO ENLACE ..." a cada 300 s com entrega e
+ *   RSSI médio só daquela janela (o log de 5 s é acumulado desde o Retry).
  * ------------------------------------------------------------------------- */
-typedef enum {
-    G_RPM = 0,
-    G_VELOCIDADE,
-    G_CONSUMO,
-    G_ETANOL,
-    G_TEMP_MOTOR,
-    G_TEMP_AR,
-    G_MAP,
-    G_TANQUE_L,
-    G_TANQUE_PCT,
-    G_BATERIA,
-    G_TOTAL,
-} grandeza_t;
+#ifndef MEDICAO_LATENCIA
+#define MEDICAO_LATENCIA 0
+#endif
+#ifndef MEDICAO_ENLACE
+#define MEDICAO_ENLACE 0
+#endif
+
+#if MEDICAO_LATENCIA
+#include "driver/gpio.h"
+#include "config_placa.h"
+#endif
+
+#define MEDICAO_ENLACE_JANELA_MS  (300 * 1000)
+
+/* Área de toque de cada campo do painel, a partir da posição do ícone. Um
+ * campo vai do ícone até perto da coluna seguinte (ícones em x 45 e 389) e
+ * as linhas ficam a 81 px uma da outra. */
+#define AREA_TOQUE_MARGEM         8
+#define AREA_TOQUE_LARGURA        330
+#define AREA_TOQUE_ALTURA         66
+
+/* Grandezas de cada campo: grandeza.h. A tabela de ícones em ui_icones.c
+ * segue a mesma ordem. */
+_Static_assert(G_TOTAL == UI_ICONES_GRANDEZAS,
+               "grandeza_t mudou: atualize ICONE_GRANDEZA em ui_icones.c");
 
 /* Sem acentos: as fontes Montserrat embutidas no LVGL não têm os glifos */
 static const char OPCOES_GRANDEZAS[] =
@@ -198,28 +219,108 @@ static void atualizar_painel(const telem_pacote_t *p, bool tem, bool ok,
      * dados do CAN, nenhum alarme pode ser avaliado — por isso vêm antes. */
     const nvm_config_t *cfg = nvm_config();
     bool dados = ok && (p->flags & TELEM_FLAG_DADOS_VALIDOS);
+    bool alarme_temp = dados && cfg->alarme_temp_on && alarme == ALARME_ATIVO;
+    ui_status_t status;
     if (!ok) {
         strcpy(s_msg_status, tem ? "Sem sinal do modulo A" : "Aguardando modulo A");
+        status = UI_STATUS_SEM_ENLACE;
     } else if (!dados) {
         strcpy(s_msg_status, "Aguardando dados do CAN");
-    } else if (cfg->alarme_temp_on && alarme == ALARME_ATIVO) {
+        status = UI_STATUS_SEM_CAN;
+    } else if (alarme_temp) {
         fmt_escalado(s_msg_status, "ALARME: motor a ", alarme_media_d(), 1, "°C");
+        status = UI_STATUS_SUPERAQUECIMENTO;
     } else if (cfg->alarme_frio_on && p->temp_arref_d < MOTOR_FRIO_TEMP_D &&
                p->rpm > MOTOR_FRIO_RPM_MAX) {
         strcpy(s_msg_status, "Motor frio: alivie o giro");
+        status = UI_STATUS_MOTOR_FRIO;
     } else if (cfg->eco_on && p->velocidade > 0 && p->rpm > cfg->eco_rpm) {
         strcpy(s_msg_status, "ECO: troque de marcha");
+        status = UI_STATUS_ECO;
     } else {
         strcpy(s_msg_status, "OK");
+        status = UI_STATUS_OK;
+    }
+    ui_icones_status(status);
+
+    /* Ícone de cada campo segue o layout; o da temperatura do motor fica
+     * vermelho enquanto o alarme estiver ativo. ui_icones só redesenha se
+     * algo mudou, então chamar a 10 Hz não custa nada. */
+    for (int i = 0; i < NVM_LAYOUT_CAMPOS; i++) {
+        ui_icones_campo(i, s_layout[i], alarme_temp && s_layout[i] == G_TEMP_MOTOR);
     }
 
     if (!ok) {
         return; /* congela os últimos valores; a linha de status já avisa */
     }
+#if MEDICAO_LATENCIA
+    /* Uma inversão por tick, mesmo com RPM em dois campos: duas inversões
+     * seguidas se anulariam e o osciloscópio não veria borda nenhuma. */
+    bool rpm_mudou = false;
+    for (int i = 0; i < NVM_LAYOUT_CAMPOS; i++) {
+        char novo[PONTE_TXT_MAX];
+        formatar_grandeza(novo, (grandeza_t)s_layout[i], p);
+        if (s_layout[i] == G_RPM && strcmp(novo, s_campos[i]) != 0) {
+            rpm_mudou = true;
+        }
+        strcpy(s_campos[i], novo);
+    }
+    if (rpm_mudou) {
+        static uint32_t nivel = 0;
+        nivel ^= 1u;
+        gpio_set_level((gpio_num_t)PLACA_GPIO_MEDICAO, nivel);
+    }
+#else
     for (int i = 0; i < NVM_LAYOUT_CAMPOS; i++) {
         formatar_grandeza(s_campos[i], (grandeza_t)s_layout[i], p);
     }
+#endif
 }
+
+#if MEDICAO_ENLACE
+/* Diferença dos contadores acumulados entre o início e o fim da janela. RSSI
+ * médio = média das amostras do último pacote, tiradas a 10 Hz com o enlace
+ * ok. Retry no meio da janela zera os acumulados: a janela recomeça. */
+static void medicao_enlace(const estado_enlace_t *e, bool ok)
+{
+    static int64_t inicio_ms = 0;
+    static uint32_t rx0 = 0, perdidos0 = 0;
+    static int64_t soma_rssi = 0;
+    static uint32_t amostras = 0;
+
+    int64_t agora = agora_ms();
+    if (inicio_ms == 0 || e->recebidos < rx0 || e->perdidos < perdidos0) {
+        inicio_ms = agora;
+        rx0 = e->recebidos;
+        perdidos0 = e->perdidos;
+        soma_rssi = 0;
+        amostras = 0;
+        return;
+    }
+    if (ok) {
+        soma_rssi += e->rssi_dbm;
+        amostras++;
+    }
+    if (agora - inicio_ms < MEDICAO_ENLACE_JANELA_MS) {
+        return;
+    }
+    uint32_t rx = e->recebidos - rx0;
+    uint32_t perdidos = e->perdidos - perdidos0;
+    uint32_t total = rx + perdidos;
+    /* entrega em décimos de % para mostrar uma casa sem float */
+    uint32_t entrega_d = total ? (uint32_t)(((uint64_t)rx * 1000u) / total) : 0;
+    printf("MEDICAO ENLACE janela=%lus rx=%lu perdidos=%lu entrega=%lu.%lu%% rssi_med=%ld\n",
+           (unsigned long)((agora - inicio_ms) / 1000), (unsigned long)rx,
+           (unsigned long)perdidos, (unsigned long)(entrega_d / 10),
+           (unsigned long)(entrega_d % 10),
+           (long)(amostras ? soma_rssi / (int64_t)amostras : 0));
+    inicio_ms = agora;
+    rx0 = e->recebidos;
+    perdidos0 = e->perdidos;
+    soma_rssi = 0;
+    amostras = 0;
+}
+#endif
 
 static void atualizar_config(const telem_pacote_t *p, const estado_enlace_t *e, bool ok)
 {
@@ -276,6 +377,13 @@ static void ao_disparar_timer(lv_timer_t *timer)
 
     atualizar_painel(&p, tem, ok, alarme);
     atualizar_config(&p, &enlace, ok);
+    ui_icones_sinal(ok, enlace.rssi_dbm);
+    ui_detalhe_amostrar(&p, amostra_valida);
+#if MEDICAO_ENLACE
+    if (tem) {
+        medicao_enlace(&enlace, ok);
+    }
+#endif
 
     /* Resumo no serial a cada 5 s: mostra se o enlace está vivo sem precisar
      * olhar a tela. Log a 0,2 Hz na task do LVGL não atrapalha o desenho. */
@@ -303,6 +411,41 @@ static void ao_navegar(lv_event_t *e)
 {
     enum ScreensEnum destino = (enum ScreensEnum)(intptr_t)lv_event_get_user_data(e);
     loadScreen(destino);
+}
+
+/* Toque num campo do Painel principal: abre o detalhe da grandeza que está
+ * nele AGORA (segue o layout) */
+static void ao_tocar_campo(lv_event_t *e)
+{
+    int campo = (int)(intptr_t)lv_event_get_user_data(e);
+    ui_detalhe_abrir(s_layout[campo]);
+}
+
+/* Os campos do EEZ são um Image + um Label do tamanho do texto: alvo pequeno
+ * e que muda de largura com o valor. Por cima de cada par vai uma área
+ * transparente fixa, que só escurece de leve enquanto está pressionada. */
+static void criar_areas_toque(void)
+{
+    lv_obj_t *icones[NVM_LAYOUT_CAMPOS] = {
+        objects.icon_v1, objects.icon_v2, objects.icon_v3,
+        objects.icon_v4, objects.icon_v5, objects.icon_v6,
+    };
+    for (int i = 0; i < NVM_LAYOUT_CAMPOS; i++) {
+        if (icones[i] == NULL) {
+            continue;
+        }
+        lv_obj_t *area = lv_obj_create(objects.painel_principal);
+        lv_obj_remove_style_all(area);
+        lv_obj_set_pos(area,
+                       lv_obj_get_style_x(icones[i], LV_PART_MAIN) - AREA_TOQUE_MARGEM,
+                       lv_obj_get_style_y(icones[i], LV_PART_MAIN) - AREA_TOQUE_MARGEM);
+        lv_obj_set_size(area, AREA_TOQUE_LARGURA, AREA_TOQUE_ALTURA);
+        lv_obj_set_style_radius(area, 8, LV_PART_MAIN);
+        lv_obj_set_style_bg_color(area, lv_color_white(), LV_PART_MAIN | LV_STATE_PRESSED);
+        lv_obj_set_style_bg_opa(area, LV_OPA_20, LV_PART_MAIN | LV_STATE_PRESSED);
+        lv_obj_add_flag(area, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_event_cb(area, ao_tocar_campo, LV_EVENT_CLICKED, (void *)(intptr_t)i);
+    }
 }
 
 static void ao_trocar_campo(lv_event_t *e)
@@ -510,12 +653,32 @@ void ui_ponte_iniciar(void)
     ligar_botao(objects.return_config, ao_navegar, SCREEN_ID_PRINCIPAL);
     ligar_botao(objects.btn_alarms, ao_navegar, SCREEN_ID_PAINEL_ALARMS);
     ligar_botao(objects.return_alarms, ao_navegar, SCREEN_ID_PRINCIPAL);
+    ligar_botao(objects.return_detalhe, ao_navegar, SCREEN_ID_PAINEL_PRINCIPAL);
 
     /* Botões de voltar viraram ícones (imagebutton A8) no EEZ */
     colorir_icone(objects.return_painel);
     colorir_icone(objects.return_layout);
     colorir_icone(objects.return_config);
     colorir_icone(objects.return_alarms);
+    colorir_icone(objects.return_detalhe);
+
+    /* Ícones fixos do EEZ (menu, alarmes, Retry) em branco + estado inicial
+     * dos dinâmicos (campos, status, sinal) */
+    ui_icones_iniciar();
+
+    /* Tocar num campo do painel abre o detalhe da grandeza */
+    criar_areas_toque();
+    ui_detalhe_iniciar();
+
+#if MEDICAO_LATENCIA
+    gpio_config_t marcador = {
+        .pin_bit_mask = 1ULL << PLACA_GPIO_MEDICAO,
+        .mode = GPIO_MODE_OUTPUT,
+    };
+    gpio_config(&marcador);
+    gpio_set_level((gpio_num_t)PLACA_GPIO_MEDICAO, 0);
+    ESP_LOGW(TAG, "MEDICAO_LATENCIA: marcador de RPM no GPIO %d", PLACA_GPIO_MEDICAO);
+#endif
 
     preparar_tela_alarmes();
 

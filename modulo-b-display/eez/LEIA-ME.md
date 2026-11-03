@@ -98,7 +98,46 @@ Se usar outro tamanho no EEZ, habilite `CONFIG_LV_FONT_MONTSERRAT_<n>` em
 Todas incluem o `°`. Acentos (ã, ç, é) **não** vêm nas fontes embutidas. Para
 usá-los, adicione uma fonte própria no EEZ com a faixa de caracteres latinos.
 
-## 6. Fluxo de trabalho
+## 6. Ícones
+
+Passo a passo completo em [`GUIA_ICONES.md`](GUIA_ICONES.md). Os bitmaps
+`ic_*` (A8, **Always build**) entram no projeto pelo
+`ferramentas/icones/injetar_bitmaps_eez.py`, com o EEZ fechado. A cor é
+aplicada pelo firmware (`src/ui_icones.c`).
+
+Widgets **Image** com nome obrigatório na tela *Painel principal*:
+
+| Name | Tamanho | Função |
+|---|---|---|
+| `icon_v1` … `icon_v6` | 48 × 48 | ícone da grandeza de cada campo (Value_1..6) |
+| `icon_status` | 32 × 32 | estado da linha de status (OK, sem CAN, alarmes) |
+| `icon_sinal` | 32 × 32 | barras de sinal do ESP-NOW |
+
+Nome errado ou faltando dá `'objects_t' has no member named 'icon_...'`;
+bitmap sem Always build dá `undefined reference to img_ic_...`.
+
+## 7. Tela de detalhe
+
+Tocar num campo do *Painel principal* abre o detalhe da grandeza que está
+nele: valor atual, gráfico dos últimos 5 min e mín / média / máx desde o boot.
+As áreas de toque são criadas pelo firmware; no EEZ só existe a tela. Lógica
+em `src/ui_detalhe.c`.
+
+A tela `painel_detalhe` tem que ser a **última** da lista (as outras não podem
+mudar de `SCREEN_ID`). Widgets com nome obrigatório:
+
+| Name | Widget | Observação |
+|---|---|---|
+| `return_detalhe` | Imagebutton | seta de voltar, igual às outras telas |
+| `icon_detalhe` | Image 48 × 48 | o firmware troca o bitmap |
+| `titulo_detalhe`, `valor_detalhe` | Label | estilo `texto` |
+| `min_detalhe`, `med_detalhe`, `max_detalhe` | Label | estilo `texto` (sem ele o texto sai preto) |
+| `grafico_detalhe` | Container | vazio; o gráfico é criado dentro |
+| `btn_zerar_detalhe` | Button | zera mín/média/máx da grandeza aberta |
+
+Nenhuma dessas Labels é ligada a variável: o firmware escreve direto nelas.
+
+## 8. Fluxo de trabalho
 
 1. Desenhe no EEZ → **Build** (F7), que escreve em `src/ui/`.
 2. No VS Code, compile o `modulo-b-display` normalmente.

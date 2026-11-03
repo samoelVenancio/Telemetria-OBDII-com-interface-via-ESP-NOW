@@ -16,7 +16,8 @@ enum ScreensEnum {
     SCREEN_ID_PAINEL_LAYOUT = 3,
     SCREEN_ID_PAINEL_CONFIG = 4,
     SCREEN_ID_PAINEL_ALARMS = 5,
-    _SCREEN_ID_LAST = 5
+    SCREEN_ID_PAINEL_DETALHE = 6,
+    _SCREEN_ID_LAST = 6
 };
 
 typedef struct _objects_t {
@@ -25,6 +26,7 @@ typedef struct _objects_t {
     lv_obj_t *painel_layout;
     lv_obj_t *painel_config;
     lv_obj_t *painel_alarms;
+    lv_obj_t *painel_detalhe;
     lv_obj_t *btn_settings;
     lv_obj_t *btn_panel;
     lv_obj_t *btn_layout;
@@ -36,6 +38,14 @@ typedef struct _objects_t {
     lv_obj_t *vel_txt_2;
     lv_obj_t *temp_txt_2;
     lv_obj_t *return_painel;
+    lv_obj_t *icon_v1;
+    lv_obj_t *icon_v2;
+    lv_obj_t *icon_v3;
+    lv_obj_t *icon_v4;
+    lv_obj_t *icon_v5;
+    lv_obj_t *icon_v6;
+    lv_obj_t *icon_status;
+    lv_obj_t *icon_sinal;
     lv_obj_t *obj0;
     lv_obj_t *obj1;
     lv_obj_t *dropdown_v1;
@@ -68,6 +78,15 @@ typedef struct _objects_t {
     lv_obj_t *return_alarms;
     lv_obj_t *obj14;
     lv_obj_t *obj15;
+    lv_obj_t *return_detalhe;
+    lv_obj_t *icon_detalhe;
+    lv_obj_t *titulo_detalhe;
+    lv_obj_t *valor_detalhe;
+    lv_obj_t *grafico_detalhe;
+    lv_obj_t *min_detalhe;
+    lv_obj_t *med_detalhe;
+    lv_obj_t *max_detalhe;
+    lv_obj_t *btn_zerar_detalhe;
 } objects_t;
 
 extern objects_t objects;
@@ -86,6 +105,9 @@ void tick_screen_painel_config();
 
 void create_screen_painel_alarms();
 void tick_screen_painel_alarms();
+
+void create_screen_painel_detalhe();
+void tick_screen_painel_detalhe();
 
 void tick_screen_by_id(enum ScreensEnum screenId);
 void tick_screen(int screen_index);

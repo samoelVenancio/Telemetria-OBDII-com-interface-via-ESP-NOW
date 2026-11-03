@@ -32,6 +32,7 @@
  *  que mantém o nível durante o sono e através do próprio reset do despertar.
  *  No boot seguinte o hold é liberado logo antes de o driver TWAI assumir.
  */
+#include <stdio.h>
 #include <string.h>
 
 #include "freertos/FreeRTOS.h"
@@ -65,6 +66,36 @@ static const char *TAG = "can_obd2";
 #define NVS_NAMESPACE        "telemetria"
 #define NVS_CHAVE_CAN_KBPS   "can_kbps"
 
+/* ---------------------------------------------------------------------------
+ * Instrumentação para as medições do artigo. Desligada por padrão: nada
+ * disso compila no firmware de uso. Ligar pelo build_flags do platformio.ini.
+ *
+ * MEDICAO_RESPOSTA_ECM: tempo entre o fim de twai_transmit() e a aceitação
+ *   da resposta (0x7E8, single frame, 0x41, eco do PID). Acumula numa janela
+ *   e imprime UMA linha a cada 10 s com prefixo fixo "MEDICAO ECM". Sem log
+ *   por requisição: a ~9 req/s isso atrapalharia a própria temporização.
+ *   Obs.: twai_transmit() retorna quando o quadro entra na fila do
+ *   controlador, não quando termina de sair no fio; a 500 kbit/s um quadro
+ *   de 8 bytes leva ~0,25 ms, desprezível frente ao tempo da ECM.
+ *
+ * MEDICAO_LATENCIA: inverte MEDICAO_GPIO_MARCADOR a cada resposta de RPM
+ *   (PID 0x0C) aceita — canal 1 do osciloscópio. O par do outro lado é o
+ *   GPIO do Módulo B (ui_ponte.c).
+ * ------------------------------------------------------------------------- */
+#ifndef MEDICAO_RESPOSTA_ECM
+#define MEDICAO_RESPOSTA_ECM 0
+#endif
+#ifndef MEDICAO_LATENCIA
+#define MEDICAO_LATENCIA 0
+#endif
+
+/* GPIO 10 do SuperMini: livre (CAN usa 6/7), não é strapping (2, 8 e 9) e
+ * não é o LED azul (GPIO 8). Sai no pino "10" da placa. */
+#define MEDICAO_GPIO_MARCADOR   10
+#define MEDICAO_PID_RPM         0x0Cu
+#define MEDICAO_JANELA_US       (10 * 1000 * 1000)
+#define MEDICAO_LIMITE_LENTO_US (50 * 1000)   /* P2CAN da ISO 15765-4 */
+
 static int64_t s_ultima_atividade_ms = 0;
 static uint16_t s_kbps = CAN_KBPS_CARRO;
 static bool s_instalado = false;
@@ -75,6 +106,86 @@ static int64_t agora_ms(void)
 {
     return esp_timer_get_time() / 1000;
 }
+
+#if MEDICAO_RESPOSTA_ECM
+static struct {
+    int64_t inicio_us;
+    uint32_t n;
+    uint32_t min_us;
+    uint32_t max_us;
+    uint64_t soma_us;
+    uint32_t acima_50ms;
+    uint32_t timeouts;
+} s_med;
+
+/* Imprime e zera a janela quando ela fecha. Chamado após cada requisição,
+ * então a linha sai no máximo uma requisição depois dos 10 s. */
+static void medicao_ecm_fechar_janela(void)
+{
+    int64_t agora = esp_timer_get_time();
+    if (s_med.inicio_us == 0) {
+        s_med.inicio_us = agora;
+        return;
+    }
+    if (agora - s_med.inicio_us < MEDICAO_JANELA_US) {
+        return;
+    }
+    uint32_t med_us = s_med.n ? (uint32_t)(s_med.soma_us / s_med.n) : 0;
+    uint32_t min_us = s_med.n ? s_med.min_us : 0;
+    /* printf direto, sem o prefixo "I (tempo) can_obd2:", para filtrar fácil */
+    printf("MEDICAO ECM n=%lu min=%lu.%lums med=%lu.%lums max=%lu.%lums acima50=%lu timeouts=%lu\n",
+           (unsigned long)s_med.n,
+           (unsigned long)(min_us / 1000), (unsigned long)(min_us % 1000 / 100),
+           (unsigned long)(med_us / 1000), (unsigned long)(med_us % 1000 / 100),
+           (unsigned long)(s_med.max_us / 1000), (unsigned long)(s_med.max_us % 1000 / 100),
+           (unsigned long)s_med.acima_50ms, (unsigned long)s_med.timeouts);
+    memset(&s_med, 0, sizeof(s_med));
+    s_med.inicio_us = agora;
+}
+
+static void medicao_ecm_resposta(int64_t dt_us)
+{
+    uint32_t dt = (uint32_t)dt_us;
+    if (s_med.n == 0 || dt < s_med.min_us) {
+        s_med.min_us = dt;
+    }
+    if (dt > s_med.max_us) {
+        s_med.max_us = dt;
+    }
+    s_med.soma_us += dt;
+    s_med.n++;
+    if (dt > MEDICAO_LIMITE_LENTO_US) {
+        s_med.acima_50ms++;
+    }
+    medicao_ecm_fechar_janela();
+}
+
+static void medicao_ecm_timeout(void)
+{
+    s_med.timeouts++;
+    medicao_ecm_fechar_janela();
+}
+#endif /* MEDICAO_RESPOSTA_ECM */
+
+#if MEDICAO_LATENCIA
+static void medicao_marcador_iniciar(void)
+{
+    gpio_config_t cfg = {
+        .pin_bit_mask = 1ULL << MEDICAO_GPIO_MARCADOR,
+        .mode = GPIO_MODE_OUTPUT,
+    };
+    gpio_config(&cfg);
+    gpio_set_level((gpio_num_t)MEDICAO_GPIO_MARCADOR, 0);
+    ESP_LOGW(TAG, "MEDICAO_LATENCIA: marcador de RPM no GPIO %d", MEDICAO_GPIO_MARCADOR);
+}
+
+static void medicao_marcador_inverter(void)
+{
+    static uint32_t nivel = 0;
+    nivel ^= 1u;
+    gpio_set_level((gpio_num_t)MEDICAO_GPIO_MARCADOR, nivel);
+}
+#endif /* MEDICAO_LATENCIA */
 
 static bool taxa_suportada(uint16_t kbps)
 {
@@ -260,6 +371,9 @@ esp_err_t can_obd2_modo_normal(void)
     if (r == ESP_OK) {
         /* Recomeça a contagem de silêncio a partir de agora */
         s_ultima_atividade_ms = agora_ms();
+#if MEDICAO_LATENCIA
+        medicao_marcador_iniciar();
+#endif
     }
     return r;
 }
@@ -293,6 +407,9 @@ esp_err_t can_obd2_requisitar_pid(uint8_t pid, uint8_t *resposta,
         ESP_LOGW(TAG, "falha ao transmitir PID 0x%02X: %s", pid, esp_err_to_name(r));
         return r;
     }
+#if MEDICAO_RESPOSTA_ECM
+    int64_t enviado_us = esp_timer_get_time();
+#endif
 
     int64_t limite = agora_ms() + timeout_ms;
     while (agora_ms() < limite) {
@@ -315,6 +432,14 @@ esp_err_t can_obd2_requisitar_pid(uint8_t pid, uint8_t *resposta,
         if (payload < 2 || msg.data[1] != (0x40u | OBD2_MODO_DADOS) || msg.data[2] != pid) {
             continue; /* resposta de outro PID ou NRC (0x7F) — segue esperando */
         }
+#if MEDICAO_RESPOSTA_ECM
+        medicao_ecm_resposta(esp_timer_get_time() - enviado_us);
+#endif
+#if MEDICAO_LATENCIA
+        if (pid == MEDICAO_PID_RPM) {
+            medicao_marcador_inverter();
+        }
+#endif
         size_t n = payload - 2;
         if (n > 5) {
             n = 5; /* single frame carrega no máximo 5 bytes de dados após 0x41+PID */
@@ -325,6 +450,9 @@ esp_err_t can_obd2_requisitar_pid(uint8_t pid, uint8_t *resposta,
         s_ecm_respondeu = true;
         return ESP_OK;
     }
+#if MEDICAO_RESPOSTA_ECM
+    medicao_ecm_timeout();
+#endif
     return ESP_ERR_TIMEOUT;
 }
 
