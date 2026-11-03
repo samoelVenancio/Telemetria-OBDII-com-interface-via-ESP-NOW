@@ -38,3 +38,8 @@ idf_component_register(
         "ui"
         "../../comum"
 )
+
+# MEDICAO_LVGL (display_init.c): a chamada do esp_lvgl_port ao
+# lv_timer_handler passa pelo __wrap_lv_timer_handler, que cronometra e chama
+# o original. Com a medição desligada o wrapper só repassa.
+target_link_libraries(${COMPONENT_LIB} INTERFACE "-Wl,--wrap=lv_timer_handler")

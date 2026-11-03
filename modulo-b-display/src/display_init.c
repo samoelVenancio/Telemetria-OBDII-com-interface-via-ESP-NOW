@@ -3,12 +3,18 @@
  *
  * Decisões que serão defendidas em banca:
  *
- *  1. DUPLO FRAMEBUFFER EM PSRAM (num_fbs = 2) + modo full_refresh/avoid
+ *  1. DUPLO FRAMEBUFFER EM PSRAM (num_fbs = 2) + modo direct_mode/avoid
  *     tearing do esp_lvgl_port: o LVGL desenha sempre no framebuffer que NÃO
  *     está sendo varrido e a troca acontece no vsync. É isso que elimina o
  *     tearing — um framebuffer único obrigaria a escrever no mesmo buffer que
  *     o controlador RGB está lendo, e o rasgo ficaria visível em qualquer
  *     animação. Não substituir por framebuffer único.
+ *     direct_mode e não full_refresh: o LVGL redesenha só as áreas que
+ *     mudaram (e as copia para o outro framebuffer antes da troca). Medido
+ *     com MEDICAO_LVGL no cockpit com o RPM variando: full_refresh levava
+ *     ~116 ms por lv_timer_handler (~9 quadros/s, a tela inteira a cada
+ *     quadro); direct_mode, ~14 ms em média (~56 quadros/s). Perdas do
+ *     enlace iguais nos dois modos — a renderização não afeta o rádio.
  *
  *  2. BOUNCE BUFFER EM SRAM INTERNA: o controlador RGB varre o painel sem
  *     parar; se ele lesse a PSRAM diretamente, qualquer pico de tráfego no
@@ -257,10 +263,10 @@ esp_err_t display_iniciar(void)
         .flags = {
             .buff_dma = false,
             .buff_spiram = false,
-            /* full_refresh + 2 framebuffers do painel = troca no vsync,
-             * zero tearing (modo anti-tearing do esp_lvgl_port p/ RGB) */
-            .full_refresh = true,
-            .direct_mode = false,
+            /* direct_mode + 2 framebuffers do painel = troca no vsync,
+             * zero tearing, redesenhando só o que mudou (ver item 1) */
+            .full_refresh = false,
+            .direct_mode = true,
             .swap_bytes = false,
         },
     };
@@ -288,4 +294,59 @@ esp_err_t display_iniciar(void)
     ESP_LOGI(TAG, "painel %dx%d no ar, LVGL no core %d",
              PLACA_LCD_H_RES, PLACA_LCD_V_RES, LVGL_TASK_CORE);
     return ESP_OK;
+}
+
+/* ---------------------------------------------------------------------------
+ * MEDICAO_LVGL: tempo de cada lv_timer_handler (desenho + timers + toque).
+ *
+ * O lv_timer_handler é chamado dentro do esp_lvgl_port (componente gerenciado,
+ * que não editamos). O CMake liga com -Wl,--wrap=lv_timer_handler, então a
+ * chamada do port cai aqui e a original fica em __real_lv_timer_handler.
+ * Desligado, o wrapper só repassa. Ligado, imprime a cada 5 s uma linha
+ * "MEDICAO LVGL n=.. med=..us max=..us" (roda na task do LVGL, core 1).
+ * ------------------------------------------------------------------------- */
+#ifndef MEDICAO_LVGL
+#define MEDICAO_LVGL 0
+#endif
+
+#if MEDICAO_LVGL
+#include <stdio.h>
+#include "esp_timer.h"
+#define MEDICAO_LVGL_JANELA_US  (5 * 1000 * 1000)
+#endif
+
+uint32_t __real_lv_timer_handler(void);
+
+uint32_t __wrap_lv_timer_handler(void)
+{
+#if MEDICAO_LVGL
+    static int64_t inicio_janela = 0;
+    static int64_t soma_us = 0;
+    static int64_t max_us = 0;
+    static uint32_t n = 0;
+
+    int64_t t0 = esp_timer_get_time();
+    uint32_t espera = __real_lv_timer_handler();
+    int64_t t1 = esp_timer_get_time();
+
+    int64_t dt = t1 - t0;
+    soma_us += dt;
+    n++;
+    if (dt > max_us) {
+        max_us = dt;
+    }
+    if (inicio_janela == 0) {
+        inicio_janela = t0;
+    } else if (t1 - inicio_janela >= MEDICAO_LVGL_JANELA_US) {
+        printf("MEDICAO LVGL n=%lu med=%lldus max=%lldus\n",
+               (unsigned long)n, soma_us / n, max_us);
+        inicio_janela = t1;
+        soma_us = 0;
+        max_us = 0;
+        n = 0;
+    }
+    return espera;
+#else
+    return __real_lv_timer_handler();
+#endif
 }
