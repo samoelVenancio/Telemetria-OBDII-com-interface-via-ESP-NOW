@@ -10,6 +10,10 @@
 # para o CMake reler a pasta. Alterar arquivos que já existem não precisa.
 file(GLOB UI_EEZ_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/ui/*.c")
 
+# Fontes Orbitron convertidas para LVGL (src/fontes/LEIA-ME.md). Mesmo aviso
+# do glob acima: fonte nova na pasta pede Clean.
+file(GLOB FONTES_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/fontes/*.c")
+
 idf_component_register(
     SRCS
         "main.c"
@@ -21,7 +25,14 @@ idf_component_register(
         "ui_ponte.c"
         "ui_icones.c"
         "ui_detalhe.c"
+        "ui_estilo.c"
+        "ui_cockpit.c"
+        "ui_painel.c"
+        "ui_menu.c"
+        "ui_tema.c"
+        "ui_icones_k.c"
         ${UI_EEZ_SRCS}
+        ${FONTES_SRCS}
     INCLUDE_DIRS
         "."
         "ui"
