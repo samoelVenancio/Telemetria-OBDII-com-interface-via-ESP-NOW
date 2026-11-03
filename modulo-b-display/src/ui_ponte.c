@@ -50,6 +50,7 @@
 #include "ui_painel.h"
 #include "ui_menu.h"
 #include "ui_tema.h"
+#include "ui_pids.h"
 #include "grandeza.h"
 
 static const char *TAG = "ui_ponte";
@@ -410,6 +411,10 @@ static void atualizar_telas_codigo(const telem_pacote_t *p, const estado_enlace_
     ui_cockpit_atualizar(&d);
     ui_painel_atualizar(&d);
     ui_tema_atualizar(&d);
+
+    telem_suporte_t sup;
+    bool tem_sup = estado_copiar_suporte(&sup);
+    ui_pids_atualizar(&d, &sup, tem_sup);
 }
 
 static void ao_disparar_timer(lv_timer_t *timer)
@@ -476,7 +481,16 @@ static void ir(ui_destino_t destino)
     case UI_DEST_LAYOUT:  loadScreen(SCREEN_ID_PAINEL_LAYOUT); break;
     case UI_DEST_ALARMES: loadScreen(SCREEN_ID_PAINEL_ALARMS); break;
     case UI_DEST_CONFIG:  loadScreen(SCREEN_ID_PAINEL_CONFIG); break;
+    case UI_DEST_PIDS:    ui_pids_abrir(); break;
     }
+}
+
+/* Botão VARRER AGORA da tela de PIDs: pede a varredura ao Módulo A */
+static bool pedir_varredura(void)
+{
+    esp_err_t r = enlace_espnow_enviar_comando(TELEM_CMD_VARRER_PIDS, 0);
+    ESP_LOGI(TAG, "pedido de varredura de PIDs ao Modulo A: %s", esp_err_to_name(r));
+    return r == ESP_OK;
 }
 
 /* Toque num cartão do painel novo: o painel já resolve a grandeza do campo */
@@ -792,6 +806,8 @@ void ui_ponte_iniciar(void)
     ui_menu_iniciar();
     ui_cockpit_iniciar();
     ui_painel_iniciar();
+    ui_pids_iniciar();
+    ui_pids_ao_pedir_varredura(pedir_varredura);
     ui_tema_aplicar();
     ui_cockpit_abrir();   /* boot direto no cockpit */
 

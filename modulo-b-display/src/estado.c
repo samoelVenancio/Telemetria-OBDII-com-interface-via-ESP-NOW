@@ -21,6 +21,8 @@
 static telem_pacote_t s_pacote;
 static estado_enlace_t s_enlace;
 static bool s_ja_recebeu = false;
+static telem_suporte_t s_suporte;
+static bool s_tem_suporte = false;
 static portMUX_TYPE s_trava = portMUX_INITIALIZER_UNLOCKED;
 
 static int64_t agora_ms(void)
@@ -33,12 +35,36 @@ void estado_iniciar(void)
     memset(&s_pacote, 0, sizeof(s_pacote));
     memset(&s_enlace, 0, sizeof(s_enlace));
     s_ja_recebeu = false;
+    memset(&s_suporte, 0, sizeof(s_suporte));
+    s_tem_suporte = false;
+}
+
+/* Pacote de PIDs suportados: não entra nas estatísticas do enlace (que medem
+ * a telemetria de 10 Hz), só substitui o último recebido */
+static bool processar_suporte(const uint8_t *dados)
+{
+    telem_suporte_t s;
+    memcpy(&s, dados, sizeof(s)); /* buffer do rádio sem alinhamento garantido */
+    if (!telem_suporte_valido(&s)) {
+        portENTER_CRITICAL(&s_trava);
+        s_enlace.invalidos++;
+        portEXIT_CRITICAL(&s_trava);
+        return false;
+    }
+    portENTER_CRITICAL(&s_trava);
+    s_suporte = s;
+    s_tem_suporte = true;
+    portEXIT_CRITICAL(&s_trava);
+    return true;
 }
 
 bool estado_processar_rx(const uint8_t *dados, int tamanho, int rssi_dbm)
 {
     /* Validação fora da seção crítica: CRC sobre 33 bytes é barato, mas não
      * precisa rodar com interrupções travadas. */
+    if (tamanho == (int)sizeof(telem_suporte_t)) {
+        return processar_suporte(dados);
+    }
     if (tamanho != (int)sizeof(telem_pacote_t)) {
         portENTER_CRITICAL(&s_trava);
         s_enlace.invalidos++;
@@ -88,6 +114,15 @@ bool estado_copiar(telem_pacote_t *pacote, estado_enlace_t *enlace)
     if (enlace != NULL) {
         *enlace = s_enlace;
     }
+    portEXIT_CRITICAL(&s_trava);
+    return tem;
+}
+
+bool estado_copiar_suporte(telem_suporte_t *suporte)
+{
+    portENTER_CRITICAL(&s_trava);
+    bool tem = s_tem_suporte;
+    *suporte = s_suporte;
     portEXIT_CRITICAL(&s_trava);
     return tem;
 }

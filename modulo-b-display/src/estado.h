@@ -30,6 +30,10 @@ bool estado_processar_rx(const uint8_t *dados, int tamanho, int rssi_dbm);
 /* Copia atômica do estado para a UI. Retorna false se nunca chegou pacote. */
 bool estado_copiar(telem_pacote_t *pacote, estado_enlace_t *enlace);
 
+/* Último pacote de PIDs suportados (varredura do Módulo A). Retorna false se
+ * nunca chegou nenhum. */
+bool estado_copiar_suporte(telem_suporte_t *suporte);
+
 /* true se o último pacote válido chegou dentro do timeout do enlace */
 bool estado_enlace_ok(void);
 

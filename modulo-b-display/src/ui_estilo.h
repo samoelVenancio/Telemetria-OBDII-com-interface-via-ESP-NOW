@@ -75,6 +75,7 @@ typedef enum {
     UI_DEST_LAYOUT,
     UI_DEST_ALARMES,
     UI_DEST_CONFIG,
+    UI_DEST_PIDS,       /* PIDs suportados pelo ECM (botão em Configurações) */
 } ui_destino_t;
 void est_definir_navegacao(void (*ir)(ui_destino_t));
 void est_ir(ui_destino_t destino);

@@ -31,6 +31,7 @@ idf_component_register(
         "ui_menu.c"
         "ui_tema.c"
         "ui_icones_k.c"
+        "ui_pids.c"
         ${UI_EEZ_SRCS}
         ${FONTES_SRCS}
     INCLUDE_DIRS

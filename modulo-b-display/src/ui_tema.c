@@ -211,6 +211,12 @@ static lv_obj_t *cartao_linha(lv_obj_t *t, int y, int h, const lv_image_dsc_t *i
     return c;
 }
 
+static void abrir_pids(lv_event_t *e)
+{
+    (void)e;
+    est_ir(UI_DEST_PIDS);
+}
+
 static void tema_config(void)
 {
     lv_obj_t *t = objects.painel_config;
@@ -251,6 +257,15 @@ static void tema_config(void)
         texto(objects.obj13, NULL, &ui_font_orb_22, EST_TEXTO);
         colocar(objects.obj13, c3, 56, 62);
     }
+
+    /* PIDs que o ECM suporta (varredura do Módulo A): botão criado aqui, não
+     * no EEZ — mesmo visual do botão de zerar contagem */
+    lv_obj_t *pids = lv_button_create(c3);
+    lv_label_create(pids);
+    lv_obj_set_pos(pids, LARGURA - 14 - 260, 32);
+    lv_obj_set_size(pids, 260, 56);
+    estilo_botao(pids, "PIDS DO ECM");
+    lv_obj_add_event_cb(pids, abrir_pids, LV_EVENT_CLICKED, NULL);
 }
 
 static void tema_alarmes(void)
